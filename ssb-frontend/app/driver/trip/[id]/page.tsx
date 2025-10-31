@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { DriverSidebar } from "@/components/driver/driver-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -170,6 +170,7 @@ const mockTrip = {
 
 export default function TripDetailPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const params = useParams()
   const [trip, setTrip] = useState(mockTrip)
   const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false)
@@ -179,15 +180,17 @@ export default function TripDetailPage() {
   const [processing, setProcessing] = useState(false)
   const [started, setStarted] = useState(false)
   const [tripStatus, setTripStatus] = useState<'chua_khoi_hanh'|'dang_chay'|'hoan_thanh'|'huy'|undefined>(undefined)
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(true)
   const { toast } = useToast()
 
   // Realtime: join driver's trip room and move the vehicle marker when updates arrive
   const tripIdParam = (params?.id as string) || ""
   const tripIdNum = Number(tripIdParam)
-  // DEV: Cho phép override tripId bằng biến môi trường để chạy script test (ví dụ 42)
+  // DEV: Cho phép override tripId bằng biến môi trường hoặc query (?testTrip=42)
+  const testTripFromQuery = searchParams?.get('testTrip') || searchParams?.get('testTripId') || undefined
   const testTripIdEnv = process.env.NEXT_PUBLIC_TEST_TRIP_ID
-  const testTripId = testTripIdEnv ? Number(testTripIdEnv) : undefined
-  // Nếu có NEXT_PUBLIC_TEST_TRIP_ID thì ưu tiên dùng để đảm bảo nhận được sự kiện từ script
+  const testTripId = testTripFromQuery ? Number(testTripFromQuery) : (testTripIdEnv ? Number(testTripIdEnv) : undefined)
+  // Nếu có testTripId (env hoặc query) thì ưu tiên dùng để nhận event từ script test_bus_position
   const effectiveTripId = (typeof testTripId === 'number' && Number.isFinite(testTripId))
     ? testTripId
     : (Number.isFinite(tripIdNum) ? tripIdNum : undefined)
@@ -225,6 +228,8 @@ export default function TripDetailPage() {
         }))
       } catch (e) {
         console.warn('Failed to load trip detail', e)
+      } finally {
+        setLoadingDetail(false)
       }
     }
     loadDetail()
@@ -291,6 +296,11 @@ export default function TripDetailPage() {
 
   async function doStartTrip() {
     try {
+      // Guard: chỉ start khi trạng thái hiện tại là 'chua_khoi_hanh'
+      if (tripStatus && tripStatus !== 'chua_khoi_hanh') {
+        toast({ title: 'Không thể bắt đầu', description: 'Chuyến đi đã được bắt đầu hoặc kết thúc', variant: 'destructive' })
+        return
+      }
       setProcessing(true)
       const res = await startTrip(tripIdNum)
       startGPS()
@@ -311,7 +321,18 @@ export default function TripDetailPage() {
   const finishTrip = async () => {
     try {
       setProcessing(true)
-      // Gọi API kết thúc nếu backend có hỗ trợ
+      // Luôn đồng bộ trạng thái mới nhất trước khi kết thúc
+      try {
+        const res = await apiClient.getTripById(tripIdNum)
+        const data: any = (res as any).data || res
+        if (data?.trangThai) setTripStatus(data.trangThai)
+        if (data?.trangThai === 'hoan_thanh' || data?.trangThai === 'bi_huy') {
+          toast({ title: 'Không thể kết thúc', description: 'Chuyến đi đã kết thúc hoặc bị hủy', variant: 'destructive' })
+          return
+        }
+      } catch { /* ignore refresh error and try ending anyway */ }
+
+      // Thực hiện gọi API kết thúc; backend sẽ kiểm tra trạng thái hợp lệ
       await endTrip(tripIdNum)
       stopGPS()
       setTripStatus('hoan_thanh')
@@ -320,8 +341,7 @@ export default function TripDetailPage() {
       router.push('/driver')
     } catch (e) {
       toast({ title: 'Không thể kết thúc chuyến', description: (e as Error)?.message || 'Vui lòng thử lại', variant: 'destructive' })
-      // Vẫn cho phép quay về trang chính nếu muốn
-      router.push('/driver')
+      // Ở lại trang để người dùng thử lại, không điều hướng khi lỗi
     } finally {
       setProcessing(false)
     }
@@ -330,7 +350,8 @@ export default function TripDetailPage() {
   // Một nút duy nhất, thay đổi theo trạng thái
   const isLastStop = trip.currentStop === trip.stops.length - 1
   // Single CTA simplified to: if GPS not running → Start Trip; else follow stop flow
-  const showStart = !gpsRunning && !started
+  // Hiển thị nút Bắt đầu nếu trạng thái hiện tại là 'chua_khoi_hanh'
+  const showStart = tripStatus === 'chua_khoi_hanh'
 
   // Derive UI display for status/speed/time
   const currentSpeed = (typeof (busPosition as any)?.speed === 'number')
@@ -672,11 +693,11 @@ export default function TripDetailPage() {
                   size="lg"
                   variant={primaryCta.variant}
                   onClick={primaryCta.onClick}
-                  disabled={processing}
+                  disabled={processing || loadingDetail}
                   className={cn('w-full h-12 rounded-lg', primaryCta.className)}
                 >
                   <primaryCta.icon className="w-5 h-5 mr-2" />
-                  {processing ? 'Đang xử lý…' : primaryCta.label}
+                  {processing ? 'Đang xử lý…' : (loadingDetail ? 'Đang tải…' : primaryCta.label)}
                 </Button>
               </CardContent>
             </Card>

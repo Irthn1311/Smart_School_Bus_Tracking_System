@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,10 +14,69 @@ import { ActivityFeed } from "@/components/admin/activity-feed"
 import { PerformanceChart } from "@/components/admin/performance-chart"
 import { BusStatusChart } from "@/components/admin/bus-status-chart"
 import { MapView } from "@/components/tracking/MapView"
+import { useTripBusPosition } from "@/hooks/use-socket"
 
 export default function AdminDashboard() {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Buses state for MapView (khởi tạo rỗng, chỉ hiển thị marker realtime giống Parent/Driver)
+  const [buses, setBuses] = useState<any[]>([])
+
+  // Allow socket test override (?testTrip=42) or env
+  const testTripFromQuery = searchParams?.get('testTrip') || searchParams?.get('testTripId') || undefined
+  const testTripIdEnv = process.env.NEXT_PUBLIC_TEST_TRIP_ID
+  const testTripId = useMemo(() => {
+    const v = testTripFromQuery ? Number(testTripFromQuery) : (testTripIdEnv ? Number(testTripIdEnv) : undefined)
+    return (typeof v === 'number' && Number.isFinite(v)) ? v : undefined
+  }, [testTripFromQuery, testTripIdEnv])
+  const { busPosition } = useTripBusPosition(testTripId)
+
+  // Seed an initial marker like Parent/Driver when testTrip is present
+  useEffect(() => {
+    if (!testTripId) return
+    setBuses((prev) => {
+      const exists = prev.some((b) => b.id === 'test')
+      if (exists) return prev
+      return [
+        ...prev,
+        {
+          id: 'test',
+          plateNumber: '29B-TEST',
+          route: `Trip ${testTripId}`,
+          lat: 21.0285,
+          lng: 105.8542,
+          speed: 0,
+          students: 0,
+          status: 'running',
+        },
+      ]
+    })
+  }, [testTripId])
+
+  // When receiving test bus position, add/update a demo bus marker
+  useEffect(() => {
+    if (!busPosition || typeof busPosition.lat !== 'number' || typeof busPosition.lng !== 'number') return
+    setBuses((prev) => {
+      const idx = prev.findIndex((b) => b.id === 'test')
+      const updated = {
+        id: 'test',
+        plateNumber: '29B-TEST',
+        route: testTripId ? `Trip ${testTripId}` : 'Demo Trip',
+        lat: busPosition.lat,
+        lng: busPosition.lng,
+        speed: busPosition.speed ?? 0,
+        students: 0,
+        status: 'running',
+      }
+      if (idx >= 0) {
+        const copy = prev.slice()
+        copy[idx] = { ...copy[idx], ...updated }
+        return copy
+      }
+      return [...prev, updated]
+    })
+  }, [busPosition, testTripId])
 
   useEffect(() => {
     if (user && user.role?.toLowerCase() !== "admin") {
@@ -132,13 +191,12 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
                 <CardContent>
-                  {/* Replace demo preview with Leaflet MapView showing mock buses */}
+                  {/* Leaflet MapView with live-updated buses; add ?testTrip=42 to see marker move via script */}
                   <MapView
-                    buses={[
-                      { id: "1", plateNumber: "51A-12345", route: "Tuyến 1", lat: 10.762622, lng: 106.660172, speed: 35, students: 28 },
-                      { id: "2", plateNumber: "51B-67890", route: "Tuyến 3", lat: 10.772622, lng: 106.670172, speed: 28, students: 24 },
-                    ] as any}
+                    buses={buses as any}
                     height="480px"
+                    followFirstMarker
+                    autoFitOnUpdate
                   />
                 </CardContent>
             </Card>

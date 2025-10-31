@@ -41,16 +41,17 @@ export default function DriverDashboard() {
       try {
         const driverIdNum = Number(user!.id)
         // Chỉ lấy TRIPS hôm nay của tài xế, lọc trạng thái 'chua_khoi_hanh' | 'dang_chay'
-        const today = new Date()
-        const yyyy = today.getFullYear()
-        const mm = String(today.getMonth() + 1).padStart(2, '0')
-        const dd = String(today.getDate()).padStart(2, '0')
-        const todayStr = `${yyyy}-${mm}-${dd}`
+        // Dùng múi giờ VN để tránh lệch ngày
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })
         let normalized: any[] = []
         try {
-          const rTrips = await apiClient.getTrips({ ngayChay: todayStr })
+          // Gọi BE với ngayChay + maTaiXe để backend lọc đúng
+          const rTrips = await apiClient.getTrips({ ngayChay: todayStr, maTaiXe: driverIdNum })
           const tripsRaw: any[] = Array.isArray(rTrips?.data) ? rTrips.data : []
-          const tripsMine = tripsRaw.filter((t: any) => Number(t?.maTaiXe) === driverIdNum)
+          // Fallback filter phía FE (phòng trường hợp BE chưa trả maTaiXe)
+          const tripsMine = tripsRaw.length ? tripsRaw.filter((t: any) => (
+            typeof t?.maTaiXe !== 'undefined' ? Number(t.maTaiXe) === driverIdNum : true
+          )) : []
           const tripsActive = tripsMine.filter((t: any) => t?.trangThai === 'chua_khoi_hanh' || t?.trangThai === 'dang_chay')
           normalized = tripsActive
         } catch {

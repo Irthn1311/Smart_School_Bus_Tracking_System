@@ -205,3 +205,15 @@ SELECT COUNT(*) as totalTrips FROM ChuyenDi;
 SELECT COUNT(*) as totalStudentStatus FROM TrangThaiHocSinh;
 SELECT COUNT(*) as totalNotifications FROM ThongBao;
 SELECT COUNT(*) as totalIncidents FROM SuCo;
+
+-- =====================================================================
+-- Test data: Today's trip for driver taixe1@schoolbus.vn (maTaiXe = 2)
+-- Purpose: Allow logging in as driver 1 and testing Start/End APIs today
+-- Note:
+--  - Reuse existing schedule with maLichTrinh = 1 (belongs to maTaiXe = 2)
+--  - Use CURDATE() so the trip is always created for the day you run this
+--  - Initial status is 'chua_khoi_hanh' to enable testing startTrip endpoint
+-- =====================================================================
+INSERT INTO ChuyenDi (maLichTrinh, ngayChay, trangThai, gioBatDauThucTe, gioKetThucThucTe, ghiChu) VALUES
+(1, CURDATE(), 'chua_khoi_hanh', NULL, NULL, 'Trip test hôm nay cho taixe1 (driverId=2).');
+

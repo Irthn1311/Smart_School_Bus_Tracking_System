@@ -24,6 +24,13 @@ router.post(
   TripController.startTrip
 );
 
+// End a trip
+router.post(
+  "/:id/end",
+  AuthMiddleware.authenticate,
+  TripController.endTrip
+);
+
 export default router;
 
 // ============================================================

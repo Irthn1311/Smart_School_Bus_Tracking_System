@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { ParentSidebar } from "@/components/parent/parent-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,11 +18,20 @@ import { useToast } from "@/hooks/use-toast"
 export default function ParentDashboard() {
   const { user, loading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   // Selection
   const [selectedRouteId, setSelectedRouteId] = useState<number | undefined>(undefined)
   const [selectedTripId, setSelectedTripId] = useState<number | undefined>(undefined)
 
-  const { busPosition } = useTripBusPosition(selectedTripId)
+  // Allow overriding tripId by query (?testTrip=42) or env var for socket test
+  const testTripFromQuery = searchParams?.get('testTrip') || searchParams?.get('testTripId') || undefined
+  const testTripIdEnv = process.env.NEXT_PUBLIC_TEST_TRIP_ID
+  const testTripId = testTripFromQuery ? Number(testTripFromQuery) : (testTripIdEnv ? Number(testTripIdEnv) : undefined)
+  const effectiveTripId = (typeof testTripId === 'number' && Number.isFinite(testTripId))
+    ? testTripId
+    : (selectedTripId && Number.isFinite(selectedTripId) ? selectedTripId : undefined)
+
+  const { busPosition } = useTripBusPosition(effectiveTripId)
   const [busLocation, setBusLocation] = useState<{ lat: number; lng: number }>({ lat: 21.0285, lng: 105.8542 })
   const [lastUpdate, setLastUpdate] = useState<number | null>(null)
   const { toast } = useToast()
@@ -250,7 +259,7 @@ export default function ParentDashboard() {
                 <CardTitle className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
                 Vị trí xe buýt
-                  {selectedTripId ? (
+                  {effectiveTripId ? (
                     <Badge variant="outline" className="ml-2">Trip {selectedTripId}</Badge>
                   ) : (
                     <Badge variant="secondary" className="ml-2">Chưa có chuyến</Badge>
@@ -267,9 +276,9 @@ export default function ParentDashboard() {
             </CardHeader>
             <CardContent>
                   {/* Replace placeholder with Leaflet MapView */}
-                  {selectedTripId ? (
+                  {effectiveTripId ? (
                     <MapView
-                      buses={[{ id: busInfo?.id || 'bus', plateNumber: busInfo?.plateNumber || childInfo.busNumber, route: busInfo?.route || `Trip ${selectedTripId}`, status: delayAlert?.delayMinutes ? 'late' : 'running', lat: busLocation.lat, lng: busLocation.lng, speed: 30, students: 12 }] as any}
+                      buses={[{ id: busInfo?.id || 'bus', plateNumber: busInfo?.plateNumber || childInfo.busNumber, route: busInfo?.route || `Trip ${effectiveTripId}`, status: delayAlert?.delayMinutes ? 'late' : 'running', lat: busLocation.lat, lng: busLocation.lng, speed: 30, students: 12 }] as any}
                       stops={stops}
                       height="500px"
                       followFirstMarker
