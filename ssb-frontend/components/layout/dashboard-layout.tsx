@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -13,10 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Search, LogOut, Settings, User } from "lucide-react"
+import { Bell, Search, LogOut, Settings, User, Menu } from "lucide-react"
 import { Input } from "@/components/ui/input"
-
-
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -26,22 +25,61 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
   const { user, logout } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen((v) => !v)
+  const closeSidebar = () => setIsSidebarOpen(false)
+
+  useEffect(() => {
+    // Auto-close drawer on route change
+    setIsSidebarOpen(false)
+  }, [pathname])
 
   return (
-    <div className="flex h-screen bg-muted">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-sidebar flex-shrink-0">
+    <div className="flex h-screen bg-muted overflow-hidden">
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex lg:w-64 lg:flex-shrink-0 lg:border-r lg:border-border lg:bg-sidebar">
         {sidebar}
       </aside>
+
+      {/* Mobile Sidebar (Drawer) */}
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 w-64 transform border-r border-border bg-sidebar shadow-lg transition-transform duration-200 ease-in-out lg:hidden",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+        aria-hidden={!isSidebarOpen}
+      >
+        <div className="h-full overflow-y-auto">{sidebar}</div>
+      </div>
+
+      {/* Overlay for Mobile Drawer */}
+      {isSidebarOpen && (
+        <button
+          type="button"
+          onClick={closeSidebar}
+          className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm lg:hidden"
+          aria-label="Đóng menu"
+        />
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header / Top Bar */}
         <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between flex-shrink-0 shadow-sm">
-          {/* Search */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
+          {/* Left: Menu + Search */}
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={toggleSidebar}
+              aria-label="Mở menu"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -53,13 +91,11 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
 
           {/* Right Section */}
           <div className="flex items-center gap-3">
-            {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative hover:bg-accent">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
             </Button>
 
-            {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -95,7 +131,6 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
                   Cài đặt
                 </DropdownMenuItem>
 
-
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={logout} className="text-destructive">
@@ -110,8 +145,6 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
         {/* Main Page Content */}
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
-
-
     </div>
   )
 }

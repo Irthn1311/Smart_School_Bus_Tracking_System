@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Plus, Trash2, GripVertical } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { apiClient } from "@/lib/api"
+type Route = { id?: string | number; name: string; stops?: any[] }
 
 interface Stop {
   id: string
@@ -19,11 +21,25 @@ interface Stop {
 
 interface RouteFormProps {
   onClose: () => void
+  onCreated?: (route?: Route) => void
+  onUpdated?: (route?: Route) => void
+  mode?: "create" | "edit"
+  initial?: Partial<Route>
 }
 
-export function RouteForm({ onClose }: RouteFormProps) {
-  const [routeName, setRouteName] = useState("")
-  const [stops, setStops] = useState<Stop[]>([{ id: "1", name: "", address: "", estimatedTime: "" }])
+export function RouteForm({ onClose, onCreated, onUpdated, mode = "create", initial }: RouteFormProps) {
+  const [routeName, setRouteName] = useState(String((initial as any)?.tenTuyen || (initial as any)?.name || ""))
+  const [stops, setStops] = useState<Stop[]>(
+    Array.isArray((initial as any)?.stops)
+      ? ((initial as any)?.stops || []).map((s: any, idx: number) => ({
+          id: String(s.id || idx + 1),
+          name: s.tenDiemDung || s.name || "",
+          address: s.diaChi || s.address || "",
+          estimatedTime: s.thoiGianDuKien || s.estimatedTime || "",
+        }))
+      : [{ id: "1", name: "", address: "", estimatedTime: "" }]
+  )
+  const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
 
   const addStop = () => {
@@ -38,7 +54,7 @@ export function RouteForm({ onClose }: RouteFormProps) {
     setStops(stops.map((stop) => (stop.id === id ? { ...stop, [field]: value } : stop)))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!routeName) {
@@ -50,12 +66,30 @@ export function RouteForm({ onClose }: RouteFormProps) {
       return
     }
 
-    toast({
-      title: "Thành công",
-      description: "Đã thêm tuyến đường mới",
-    })
-
-    onClose()
+    try {
+      setSubmitting(true)
+      const payload = {
+        tenTuyen: routeName.trim(),
+        diemDung: stops
+          .filter((s) => s.name.trim())
+          .map((s) => ({ tenDiemDung: s.name.trim(), diaChi: s.address || undefined, thoiGianDuKien: s.estimatedTime || undefined })),
+      }
+      if (mode === "edit" && initial?.id != null) {
+        const res = await apiClient.updateRoute(initial.id as any, payload)
+        toast({ title: "Thành công", description: "Đã cập nhật tuyến đường" })
+        onUpdated?.()
+        onClose()
+      } else {
+        const res = await apiClient.createRoute({ maTuyen: `T${Date.now()}`, ...payload })
+        toast({ title: "Thành công", description: "Đã thêm tuyến đường mới" })
+        onCreated?.()
+        onClose()
+      }
+    } catch (err: any) {
+      toast({ title: "Không thành công", description: err?.message || "Tạo tuyến thất bại", variant: "destructive" })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -131,11 +165,11 @@ export function RouteForm({ onClose }: RouteFormProps) {
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
           Hủy
         </Button>
-        <Button type="submit" className="bg-primary hover:bg-primary/90">
-          Thêm tuyến đường
+        <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={submitting}>
+          {submitting ? "Đang lưu..." : mode === 'edit' ? "Cập nhật tuyến" : "Thêm tuyến đường"}
         </Button>
       </div>
     </form>

@@ -109,17 +109,22 @@ class ApiClient {
       // Handle HTTP errors
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw {
-          response: {
-            data: errorData,
-            status: response.status,
-          },
+        const error: ApiError = {
+          message: errorData.message || 'API request failed',
+          status: response.status,
+          code: errorData.code,
         }
+        throw error
       }
 
       const data = await response.json()
       return data
     } catch (error) {
+      // If error is already formatted as ApiError, throw it
+      if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
+        throw error
+      }
+      // Otherwise, handle the error
       const apiError = this.handleError(error)
       throw apiError
     }
@@ -171,10 +176,98 @@ class ApiClient {
       body: data ? JSON.stringify(data) : undefined,
     })
   }
+
+  // Student endpoints
+  async getStudents(params?: {
+    page?: number;
+    limit?: number;
+    lop?: string;
+    search?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.lop) queryParams.append('lop', params.lop);
+    if (params?.search) queryParams.append('search', params.search);
+
+    const query = queryParams.toString();
+    return this.request(`/students${query ? `?${query}` : ''}`);
+  }
+
+  async getStudentById(id: string | number) {
+    return this.request(`/students/${id}`);
+  }
+
+  async createStudent(studentData: any) {
+    return this.request('/students', {
+      method: 'POST',
+      body: JSON.stringify(studentData),
+    });
+  }
+
+  async updateStudent(id: string | number, studentData: any) {
+    return this.request(`/students/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(studentData),
+    });
+  }
+
+  async deleteStudent(id: string | number) {
+    return this.request(`/students/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Bus endpoints
+  async getBuses(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    trangThai?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.trangThai) queryParams.append('trangThai', params.trangThai);
+
+    const query = queryParams.toString();
+    return this.request(`/buses${query ? `?${query}` : ''}`);
+  }
+
+  async getBusById(id: string | number) {
+    return this.request(`/buses/${id}`);
+  }
+
+  async createBus(busData: {
+    bienSoXe: string;
+    dongXe?: string;
+    sucChua: number;
+    trangThai?: string;
+  }) {
+    return this.request('/buses', {
+      method: 'POST',
+      body: JSON.stringify(busData),
+    });
+  }
+
+  async updateBus(id: string | number, busData: any) {
+    return this.request(`/buses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(busData),
+    });
+  }
+
+  async deleteBus(id: string | number) {
+    return this.request(`/buses/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 // Create singleton instance
 export const api = new ApiClient()
+export const apiClient = api // Alias for compatibility
 
 // Export types
 export type { ApiResponse, ApiError }

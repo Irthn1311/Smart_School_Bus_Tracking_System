@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -17,52 +17,53 @@ import {
 import { Plus, Edit, Trash2, Eye, MapPin, Clock } from "lucide-react"
 import { RouteForm } from "@/components/admin/route-form"
 import { RouteDetail } from "@/components/admin/route-detail"
-
-const mockRoutes = [
-  {
-    id: "1",
-    name: "Tuyến 1 - Quận 1",
-    stops: 8,
-    distance: "12.5 km",
-    duration: "45 phút",
-    status: "active",
-    assignedBus: "51A-12345",
-  },
-  {
-    id: "2",
-    name: "Tuyến 3 - Quận 3",
-    stops: 6,
-    distance: "9.2 km",
-    duration: "35 phút",
-    status: "active",
-    assignedBus: "51B-67890",
-  },
-  {
-    id: "3",
-    name: "Tuyến 5 - Quận 5",
-    stops: 10,
-    distance: "15.8 km",
-    duration: "55 phút",
-    status: "active",
-    assignedBus: "51D-22222",
-  },
-  {
-    id: "4",
-    name: "Tuyến 7 - Quận 7",
-    stops: 7,
-    distance: "11.3 km",
-    duration: "40 phút",
-    status: "inactive",
-    assignedBus: "-",
-  },
-]
+import { apiClient } from "@/lib/api"
+type Route = { id: string; name: string; status?: string; stopsCount?: number; distance?: any; duration?: any; assignedBus?: string; raw?: any }
 
 export default function RoutesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingRoute, setEditingRoute] = useState<Route | null>(null)
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
+  const [routes, setRoutes] = useState<Route[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredRoutes = mockRoutes.filter((route) => route.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  function mapRoute(r: any): Route {
+    return {
+      id: String(r.maTuyen || r.id || r._id || ''),
+      name: r.tenTuyen || r.ten || r.name || '',
+      status: r.trangThai || r.status,
+      stopsCount: r.soDiemDung || r.stops?.length,
+      distance: r.quangDuong || r.distance,
+      duration: r.thoiLuong || r.duration,
+      assignedBus: r.xeDuocGan || r.assignedBus,
+      raw: r,
+    }
+  }
+
+  async function fetchRoutes() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiClient.getRoutes({ limit: 100 })
+      const data = (res as any).data || []
+      const items = Array.isArray(data) ? data : data?.data || []
+      setRoutes(items.map(mapRoute))
+    } catch (e: any) {
+      setError(e?.message || "Không lấy được danh sách tuyến")
+      console.error("Lỗi khi lấy danh sách tuyến:", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRoutes()
+  }, [])
+
+  const filteredRoutes = routes.filter((route) => (route.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
 
   return (
     <DashboardLayout sidebar={<AdminSidebar />}>
@@ -85,7 +86,30 @@ export default function RoutesPage() {
                 <DialogTitle>Thêm tuyến đường mới</DialogTitle>
                 <DialogDescription>Nhập thông tin tuyến đường và các điểm dừng</DialogDescription>
               </DialogHeader>
-              <RouteForm onClose={() => setIsAddDialogOpen(false)} />
+              <RouteForm
+                onClose={() => setIsAddDialogOpen(false)}
+                onCreated={() => {
+                  fetchRoutes()
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Chỉnh sửa tuyến đường</DialogTitle>
+                <DialogDescription>Cập nhật thông tin tuyến đường và điểm dừng</DialogDescription>
+              </DialogHeader>
+              <RouteForm
+                mode="edit"
+                initial={{
+                  id: editingRoute?.id,
+                  name: editingRoute?.name,
+                  stops: editingRoute?.raw?.diemDung,
+                }}
+                onClose={() => setIsEditDialogOpen(false)}
+                onUpdated={() => fetchRoutes()}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -120,6 +144,8 @@ export default function RoutesPage() {
 
         {/* Routes Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {loading && <div className="py-4">Đang tải danh sách tuyến...</div>}
+          {error && <div className="py-4 text-destructive">{error}</div>}
           {filteredRoutes.map((route) => (
             <Card key={route.id} className="border-border/50 hover:border-primary/50 transition-colors">
               <CardHeader>
@@ -129,23 +155,23 @@ export default function RoutesPage() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" />
-                        {route.stops} điểm dừng
+                        {route.stopsCount ?? '-'} điểm dừng
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
-                        {route.duration}
+                        {route.duration ?? '-'}
                       </div>
                     </div>
                   </div>
                   <Badge
                     variant="outline"
                     className={
-                      route.status === "active"
+                      route.status === "active" || route.status === "hoat_dong"
                         ? "border-success text-success"
                         : "border-muted-foreground text-muted-foreground"
                     }
                   >
-                    {route.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                    {route.status === "active" || route.status === "hoat_dong" ? "Hoạt động" : "Không hoạt động"}
                   </Badge>
                 </div>
               </CardHeader>
@@ -153,11 +179,11 @@ export default function RoutesPage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Khoảng cách</p>
-                    <p className="font-medium">{route.distance}</p>
+                    <p className="font-medium">{route.distance ?? '-'}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Xe được gán</p>
-                    <p className="font-medium">{route.assignedBus}</p>
+                    <p className="font-medium">{route.assignedBus ?? '-'}</p>
                   </div>
                 </div>
 
@@ -171,13 +197,23 @@ export default function RoutesPage() {
                     <Eye className="w-4 h-4 mr-2" />
                     Xem chi tiết
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => { setEditingRoute(route); setIsEditDialogOpen(true) }}>
                     <Edit className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:text-destructive bg-transparent"
+                    onClick={async () => {
+                      if (!confirm('Xóa tuyến này?')) return
+                      try {
+                        await apiClient.deleteRoute(route.id)
+                        fetchRoutes()
+                      } catch (err: any) {
+                        console.error(err)
+                        alert(err?.message || 'Xóa thất bại')
+                      }
+                    }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>

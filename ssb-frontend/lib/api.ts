@@ -56,6 +56,14 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
 
+    // Always read the latest token from localStorage at request time
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("token");
+      if (stored && stored !== this.token) {
+        this.token = stored;
+      }
+    }
+
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       ...options.headers,
@@ -91,7 +99,7 @@ class ApiClient {
   async login(email: string, password: string) {
     return this.request("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, matKhau: password }),
+      body: JSON.stringify({ email, password }),
     });
   }
 

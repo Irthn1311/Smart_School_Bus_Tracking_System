@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -19,58 +19,55 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, Search, Edit, Trash2, Eye, User } from "lucide-react"
 import { StudentForm } from "@/components/admin/student-form"
+import { apiClient } from "@/lib/api"
+type Student = { id: string; name: string; grade?: string; parentName?: string; parentPhone?: string; pickupPoint?: string; dropoffPoint?: string; status?: string; raw?: any }
 // tạo dữ liệu giả cho các học sinh
-const mockStudents = [
-  {
-    id: "1",
-    name: "Nguyễn Minh A",
-    grade: "Lớp 5A",
-    parent: "Nguyễn Văn X",
-    parentPhone: "0901111111",
-    pickupPoint: "Điểm 1 - Quận 1",
-    dropoffPoint: "Trường TH ABC",
-    status: "present",
-  },
-  {
-    id: "2",
-    name: "Trần Thị B",
-    grade: "Lớp 4B",
-    parent: "Trần Văn Y",
-    parentPhone: "0902222222",
-    pickupPoint: "Điểm 3 - Quận 3",
-    dropoffPoint: "Trường TH ABC",
-    status: "present",
-  },
-  {
-    id: "3",
-    name: "Lê Văn C",
-    grade: "Lớp 3C",
-    parent: "Lê Thị Z",
-    parentPhone: "0903333333",
-    pickupPoint: "Điểm 5 - Quận 5",
-    dropoffPoint: "Trường TH ABC",
-    status: "absent",
-  },
-  {
-    id: "4",
-    name: "Phạm Minh D",
-    grade: "Lớp 5B",
-    parent: "Phạm Văn K",
-    parentPhone: "0904444444",
-    pickupPoint: "Điểm 7 - Quận 7",
-    dropoffPoint: "Trường TH ABC",
-    status: "present",
-  },
-]
-
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null)
+  const [students, setStudents] = useState<Student[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredStudents = mockStudents.filter(
+  function mapStudent(s: any): Student {
+    return {
+      id: String(s.maHocSinh || s.id || s._id || ''),
+      name: s.hoTen || s.ten || s.name || '',
+      grade: s.lop || s.grade,
+      parentName: s.tenPhuHuynh || s.parentName,
+      parentPhone: s.sdtPhuHuynh || s.parentPhone,
+      pickupPoint: s.diemDon || s.pickupPoint,
+      dropoffPoint: s.diemTra || s.dropoffPoint,
+      status: s.trangThai || s.status,
+      raw: s,
+    }
+  }
+
+  async function fetchStudents() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiClient.getStudents({ limit: 100 })
+      const data = (res as any).data || []
+      const items = Array.isArray(data) ? data : data?.data || []
+      setStudents(items.map(mapStudent))
+    } catch (e: any) {
+      setError(e?.message || "Không lấy được danh sách học sinh")
+      console.error("Lỗi khi lấy danh sách học sinh:", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchStudents()
+  }, [])
+  const filteredStudents = students.filter(
     (student) =>
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.parent.toLowerCase().includes(searchQuery.toLowerCase()),
+      (student.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (student.parentName || '').toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   return (
@@ -89,12 +86,32 @@ export default function StudentsPage() {
                 Thêm học sinh
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Thêm học sinh mới</DialogTitle>
                 <DialogDescription>Nhập thông tin học sinh và phụ huynh</DialogDescription>
               </DialogHeader>
-              <StudentForm onClose={() => setIsAddDialogOpen(false)} />
+                <StudentForm onClose={() => setIsAddDialogOpen(false)} onCreated={() => fetchStudents()} />
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Chỉnh sửa học sinh</DialogTitle>
+                <DialogDescription>Cập nhật thông tin học sinh và phụ huynh</DialogDescription>
+              </DialogHeader>
+              <StudentForm
+                mode="edit"
+                initial={{
+                  id: editingStudent?.id,
+                  hoTen: editingStudent?.name,
+                  lop: editingStudent?.grade,
+                  tenPhuHuynh: editingStudent?.parentName,
+                  sdtPhuHuynh: editingStudent?.parentPhone,
+                }}
+                onClose={() => setIsEditDialogOpen(false)}
+                onUpdated={() => fetchStudents()}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -103,7 +120,7 @@ export default function StudentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="border-border/50">
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-foreground">456</div>
+              <div className="text-2xl font-bold text-foreground">{students.length}</div>
               <p className="text-sm text-muted-foreground">Tổng học sinh</p>
             </CardContent>
           </Card>
@@ -144,6 +161,8 @@ export default function StudentsPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {loading && <div className="py-4">Đang tải danh sách học sinh...</div>}
+            {error && <div className="py-4 text-destructive">{error}</div>}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -170,26 +189,28 @@ export default function StudentsPage() {
                         <span className="font-medium">{student.name}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{student.grade}</TableCell>
+                    <TableCell>{student.grade || '-'}</TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <User className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-sm">{student.parent}</span>
+                          <span className="text-sm">{student.parentName || '-'}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">{student.parentPhone}</p>
+                        <p className="text-xs text-muted-foreground">{student.parentPhone || '-'}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{student.pickupPoint}</TableCell>
-                    <TableCell className="text-sm">{student.dropoffPoint}</TableCell>
+                    <TableCell className="text-sm">{student.pickupPoint || '-'}</TableCell>
+                    <TableCell className="text-sm">{student.dropoffPoint || '-'}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
                         className={
-                          student.status === "present" ? "border-success text-success" : "border-warning text-warning"
+                          student.status === "present" || student.status === "co_mat"
+                            ? "border-success text-success"
+                            : "border-warning text-warning"
                         }
                       >
-                        {student.status === "present" ? "Có mặt" : "Vắng"}
+                        {student.status === "present" || student.status === "co_mat" ? "Có mặt" : "Vắng"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -197,10 +218,24 @@ export default function StudentsPage() {
                         <Button variant="ghost" size="icon">
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditingStudent(student); setIsEditDialogOpen(true) }}>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            if (!confirm('Xóa học sinh này?')) return
+                            try {
+                              await apiClient.deleteStudent(student.id)
+                              fetchStudents()
+                            } catch (err: any) {
+                              console.error(err)
+                              alert(err?.message || 'Xóa thất bại')
+                            }
+                          }}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>

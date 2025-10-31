@@ -88,8 +88,15 @@ class ValidationMiddleware {
         "string.max": "Họ tên không được quá 100 ký tự",
         "any.required": "Họ tên là bắt buộc",
       }),
-      ngaySinh: Joi.date().max("now").optional(),
-      lop: Joi.string().max(50).optional(),
+      ngaySinh: Joi.date().max("now").required().messages({
+        "any.required": "Ngày sinh là bắt buộc",
+        "date.base": "Ngày sinh phải là ngày hợp lệ",
+        "date.max": "Ngày sinh không được là ngày trong tương lai",
+      }),
+      lop: Joi.string().max(50).required().messages({
+        "any.required": "Lớp là bắt buộc",
+        "string.max": "Lớp không được quá 50 ký tự",
+      }),
       maPhuHuynh: Joi.number().integer().positive().optional(),
       diaChi: Joi.string().max(255).optional(),
       anhDaiDien: Joi.string().uri().optional(),

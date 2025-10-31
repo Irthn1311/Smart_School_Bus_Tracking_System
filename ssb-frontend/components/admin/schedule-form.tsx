@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +14,7 @@ import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { apiClient } from "@/lib/api"
 
 interface ScheduleFormProps {
   onClose: () => void
@@ -25,9 +26,37 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
   const [bus, setBus] = useState("")
   const [driver, setDriver] = useState("")
   const [startTime, setStartTime] = useState("")
+  const [routes, setRoutes] = useState<any[]>([])
+  const [buses, setBuses] = useState<any[]>([])
+  const [drivers, setDrivers] = useState<any[]>([])
+  const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const [r, b, d] = await Promise.all([
+          apiClient.getRoutes({ limit: 100 }),
+          apiClient.getBuses({ limit: 100 }),
+          apiClient.getDrivers({ limit: 100 }),
+        ])
+        const rItems = ((r as any).data && Array.isArray((r as any).data) ? (r as any).data : (r as any).data?.data) || []
+        const bItems = ((b as any).data && Array.isArray((b as any).data) ? (b as any).data : (b as any).data?.data) || []
+        const dItems = ((d as any).data && Array.isArray((d as any).data) ? (d as any).data : (d as any).data?.data) || []
+        if (mounted) {
+          setRoutes(rItems)
+          setBuses(bItems)
+          setDrivers(dItems)
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!date || !route || !bus || !driver || !startTime) {
@@ -39,12 +68,24 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
       return
     }
 
-    toast({
-      title: "Thành công",
-      description: "Đã tạo lịch trình mới",
-    })
-
-    onClose()
+    try {
+      setSubmitting(true)
+      const payload = {
+        ngayChay: date.toISOString().slice(0, 10),
+        gioKhoiHanh: startTime,
+        maTuyen: route,
+        maXe: bus,
+        maTaiXe: driver,
+        trangThai: 'da_len_lich',
+      }
+      await apiClient.createSchedule(payload)
+      toast({ title: "Thành công", description: "Đã tạo lịch trình mới" })
+      onClose()
+    } catch (err: any) {
+      toast({ title: "Không thành công", description: err?.message || "Tạo lịch thất bại", variant: "destructive" })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -74,10 +115,11 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
             <SelectValue placeholder="Chọn tuyến" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="route1">Tuyến 1 - Quận 1</SelectItem>
-            <SelectItem value="route3">Tuyến 3 - Quận 3</SelectItem>
-            <SelectItem value="route5">Tuyến 5 - Quận 5</SelectItem>
-            <SelectItem value="route7">Tuyến 7 - Quận 7</SelectItem>
+            {routes.map((r: any) => (
+              <SelectItem key={r.maTuyen || r.id || r._id} value={String(r.maTuyen || r.id || r._id)}>
+                {r.tenTuyen || r.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -90,9 +132,11 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
               <SelectValue placeholder="Chọn xe" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="bus1">51A-12345</SelectItem>
-              <SelectItem value="bus2">51B-67890</SelectItem>
-              <SelectItem value="bus3">51D-22222</SelectItem>
+              {buses.map((b: any) => (
+                <SelectItem key={b.maXe || b.id || b._id} value={String(b.maXe || b.id || b._id)}>
+                  {b.bienSoXe || b.plateNumber}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -104,9 +148,11 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
               <SelectValue placeholder="Chọn tài xế" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="driver1">Nguyễn Văn A</SelectItem>
-              <SelectItem value="driver2">Trần Văn B</SelectItem>
-              <SelectItem value="driver3">Phạm Văn D</SelectItem>
+              {drivers.map((d: any) => (
+                <SelectItem key={d.maTaiXe || d.id || d._id} value={String(d.maTaiXe || d.id || d._id)}>
+                  {d.hoTen || d.ten || d.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -118,11 +164,11 @@ export function ScheduleForm({ onClose }: ScheduleFormProps) {
       </div>
 
       <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
           Hủy
         </Button>
-        <Button type="submit" className="bg-primary hover:bg-primary/90">
-          Tạo lịch trình
+        <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={submitting}>
+          {submitting ? "Đang lưu..." : "Tạo lịch trình"}
         </Button>
       </div>
     </form>

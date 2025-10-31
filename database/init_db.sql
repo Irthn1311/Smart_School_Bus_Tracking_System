@@ -44,6 +44,7 @@ CREATE TABLE NguoiDung (
 -- Create TaiXe table (Drivers)
 CREATE TABLE TaiXe (
     maTaiXe INT PRIMARY KEY,
+    tenTaiXe VARCHAR(100) NOT NULL,
     soBangLai VARCHAR(20) NOT NULL UNIQUE,
     ngayHetHanBangLai DATE,
     soNamKinhNghiem INT DEFAULT 0,
@@ -62,8 +63,6 @@ CREATE TABLE XeBuyt (
     dongXe VARCHAR(50),
     sucChua INT NOT NULL,
     trangThai ENUM('hoat_dong', 'bao_tri', 'ngung_hoat_dong') DEFAULT 'hoat_dong',
-    ngayTao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ngayCapNhat TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_bienSoXe (bienSoXe),
     INDEX idx_trangThai (trangThai)
 );

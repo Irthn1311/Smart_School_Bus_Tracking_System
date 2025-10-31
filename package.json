@@ -10,7 +10,8 @@
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
     "sequelize": "^6.37.7",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "name": "smart_school_bus_tracking_system",
   "version": "1.0.0",

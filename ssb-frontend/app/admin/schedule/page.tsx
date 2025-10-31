@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -17,40 +17,61 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, CalendarIcon, Bus, User } from "lucide-react"
 import { ScheduleForm } from "@/components/admin/schedule-form"
+import { apiClient } from "@/lib/api"
 
-const mockSchedules = [
-  {
-    id: "1",
-    date: "2024-01-15",
-    route: "Tuyến 1 - Quận 1",
-    bus: "51A-12345",
-    driver: "Nguyễn Văn A",
-    startTime: "06:30",
-    status: "scheduled",
-  },
-  {
-    id: "2",
-    date: "2024-01-15",
-    route: "Tuyến 3 - Quận 3",
-    bus: "51B-67890",
-    driver: "Trần Văn B",
-    startTime: "06:45",
-    status: "scheduled",
-  },
-  {
-    id: "3",
-    date: "2024-01-15",
-    route: "Tuyến 5 - Quận 5",
-    bus: "51D-22222",
-    driver: "Phạm Văn D",
-    startTime: "07:00",
-    status: "scheduled",
-  },
-]
+type Schedule = { id: string; date?: string; route?: string; bus?: string; driver?: string; startTime?: string; status?: string; raw?: any }
 
 export default function SchedulePage() {
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function formatDate(d?: Date) {
+    if (!d) return ''
+    const yyyy = d.getFullYear()
+    const mm = `${d.getMonth() + 1}`.padStart(2, '0')
+    const dd = `${d.getDate()}`.padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  function mapSchedule(s: any): Schedule {
+    return {
+      id: String(s.id || s.maLich || s._id || ''),
+      date: s.ngayChay || s.date,
+      route: s.tenTuyen || s.route?.tenTuyen || s.routeName || s.route,
+      bus: s.bienSoXe || s.bus?.bienSoXe || s.busPlate || s.bus,
+      driver: s.tenTaiXe || s.driver?.hoTen || s.driverName || s.driver,
+      startTime: s.gioKhoiHanh || s.startTime,
+      status: s.trangThai || s.status,
+      raw: s,
+    }
+  }
+
+  async function fetchSchedulesByDate(d?: Date) {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiClient.getSchedules({})
+      const data = (res as any).data || []
+      const items = Array.isArray(data) ? data : data?.data || []
+      const filtered = items
+        .filter((s: any) => !d || (s.ngayChay || s.date)?.startsWith(formatDate(d)))
+        .map(mapSchedule)
+      setSchedules(filtered)
+    } catch (e: any) {
+      setError(e?.message || 'Không lấy được lịch trình')
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSchedulesByDate(date)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date?.toDateString()])
 
   return (
     <DashboardLayout sidebar={<AdminSidebar />}>
@@ -100,7 +121,9 @@ export default function SchedulePage() {
                 <CardTitle>Lịch trình ngày {date?.toLocaleDateString("vi-VN")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {mockSchedules.map((schedule) => (
+                {loading && <div className="py-2">Đang tải lịch trình...</div>}
+                {error && <div className="py-2 text-destructive">{error}</div>}
+                {schedules.map((schedule) => (
                   <Card key={schedule.id} className="border-border/50">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-3">
@@ -109,7 +132,7 @@ export default function SchedulePage() {
                           <p className="text-sm text-muted-foreground mt-1">Khởi hành: {schedule.startTime}</p>
                         </div>
                         <Badge variant="outline" className="border-primary text-primary">
-                          Đã lên lịch
+                          {schedule.status === 'scheduled' || schedule.status === 'da_len_lich' ? 'Đã lên lịch' : schedule.status || 'Trạng thái' }
                         </Badge>
                       </div>
 
