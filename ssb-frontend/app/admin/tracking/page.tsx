@@ -249,7 +249,7 @@ export default function TrackingPage() {
           const status = determineStatus(detail, speed, hasDelay, hasIncident)
 
           busesWithRoutes.push({
-            id: (busInfo?.maXe || detail?.maXe || trip.maXe || trip.id) + "",
+            id: (trip.maChuyen || trip.id) + "", // Use tripId as unique key to avoid duplicates
             tripId: (trip.maChuyen || trip.id) + "",
             plateNumber: busInfo?.bienSoXe || detail?.bienSoXe || "N/A",
             route: routeName,

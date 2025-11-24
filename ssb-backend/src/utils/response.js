@@ -149,6 +149,9 @@ export function serverError(res, message = 'Internal server error', err = null) 
     console.error('Server Error:', err);
   }
 
-  return error(res, 'INTERNAL_ERROR', message, 500);
+  // 🔥 FIX: Đảm bảo message không bao giờ rỗng
+  const finalMessage = message || err?.message || 'Internal server error';
+  
+  return error(res, 'INTERNAL_ERROR', finalMessage, 500);
 }
 

@@ -463,10 +463,8 @@ export default function SchedulePage() {
               // 🔥 Cải thiện error handling: Extract error message từ nhiều nguồn
               let errorMessage = 'Lỗi không xác định'
               
-              // Thử extract từ nhiều nguồn khác nhau
-              if (err?.message) {
-                errorMessage = err.message
-              } else if (err?.response?.data?.message) {
+              // Thử extract từ nhiều nguồn khác nhau (theo thứ tự ưu tiên)
+              if (err?.response?.data?.message) {
                 errorMessage = err.response.data.message
               } else if (err?.response?.data?.error?.message) {
                 errorMessage = err.response.data.error.message
@@ -474,6 +472,8 @@ export default function SchedulePage() {
                 errorMessage = typeof err.response.data.error === 'string' 
                   ? err.response.data.error 
                   : JSON.stringify(err.response.data.error)
+              } else if (err?.message) {
+                errorMessage = err.message
               } else if (err?.response?.data?.errorCode) {
                 errorMessage = `Error code: ${err.response.data.errorCode}`
               } else if (err?.code) {
@@ -484,6 +484,15 @@ export default function SchedulePage() {
                 errorMessage = typeof err.error === 'string' ? err.error : JSON.stringify(err.error)
               } else if (err?.status) {
                 errorMessage = `HTTP ${err.status}: ${err.statusText || 'Request failed'}`
+              }
+              
+              // 🔥 FIX: Nếu vẫn là "Lỗi không xác định", thử stringify toàn bộ error
+              if (errorMessage === 'Lỗi không xác định') {
+                try {
+                  errorMessage = JSON.stringify(err, null, 2)
+                } catch (e) {
+                  errorMessage = `Lỗi không parse được: ${String(err)}`
+                }
               }
               
               // Log toàn bộ error object để debug (chỉ log một lần để tránh spam)
@@ -529,15 +538,22 @@ export default function SchedulePage() {
               
               console.error(`[AutoAssign] Failed to create schedule (${totalFailed}/${totalCreated + totalFailed}):`, {
                 errorMessage,
+                fullError: err,
                 status: err?.status,
                 code: err?.code,
                 dateStr,
                 route: route.tenTuyen || route.maTuyen,
                 tripType,
-                maTuyen: route.maTuyen || route.id,
-                maXe: bus.maXe || bus.id,
-                maTaiXe: driver.maTaiXe || driver.maNguoiDung || driver.id,
+                payload: {
+                  maTuyen: route.maTuyen || route.id,
+                  maXe: bus.maXe || bus.id,
+                  maTaiXe: driver.maTaiXe || driver.maNguoiDung || driver.id,
+                  loaiChuyen: tripType,
+                  gioKhoiHanh: startTime,
+                  ngayChay: dateStr,
+                },
                 responseData: err?.response?.data,
+                responseStatus: err?.response?.status,
               })
               
               // Nếu lỗi do rate limiting, thêm delay lâu hơn trước khi tiếp tục

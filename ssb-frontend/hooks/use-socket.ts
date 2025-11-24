@@ -233,22 +233,47 @@ export function useTripBusPosition(tripId?: number) {
   const { isConnected } = useSocket();
 
   useEffect(() => {
-    if (!tripId || !isConnected) return;
+    if (!tripId || !isConnected) {
+      console.log('[useTripBusPosition] Skipping: tripId=', tripId, 'isConnected=', isConnected);
+      return;
+    }
 
     const socket = socketService.getSocket();
-    // join trip room to receive updates
+    if (!socket) {
+      console.warn('[useTripBusPosition] Socket not available');
+      return;
+    }
+
+    // 🔥 FIX: Join trip room to receive updates - Đảm bảo join được gọi
     try {
-      console.log('[useTripBusPosition] join_trip', tripId);
-      socket?.emit('join_trip', tripId);
-    } catch {}
+      console.log('[useTripBusPosition] Joining trip room:', tripId);
+      socket.emit('join_trip', tripId);
+      
+      // Wait a bit for join to complete
+      setTimeout(() => {
+        console.log('[useTripBusPosition] Joined trip room:', tripId);
+      }, 100);
+    } catch (err) {
+      console.error('[useTripBusPosition] Error joining trip room:', err);
+    }
 
     const onData = (data: any) => {
-      if (!data) return;
+      if (!data) {
+        console.warn('[useTripBusPosition] Received empty data');
+        return;
+      }
       const tId = data.tripId ?? data.trip_id;
-      if ((tId + '') !== (tripId + '')) return;
+      if ((tId + '') !== (tripId + '')) {
+        console.log('[useTripBusPosition] Ignoring data for different trip:', tId, 'expected:', tripId);
+        return;
+      }
       const lat = data.lat ?? data.latitude ?? data.coords?.lat;
       const lng = data.lng ?? data.longitude ?? data.coords?.lng;
-      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        console.warn('[useTripBusPosition] Invalid lat/lng:', { lat, lng });
+        return;
+      }
+      console.log('[useTripBusPosition] ✅ Updating bus position:', { lat, lng, speed: data.speed });
       setBusPosition({
         lat,
         lng,
@@ -261,27 +286,30 @@ export function useTripBusPosition(tripId?: number) {
 
     // Listen to socket events directly
     const socketHandler = (payload: any) => {
-      console.log('[useTripBusPosition] socket event', payload);
+      console.log('[useTripBusPosition] 📍 Received bus_position_update:', payload);
       onData(payload);
     };
-    socket?.on('bus_position_update', socketHandler);
-    socket?.on('bus_location_update', socketHandler);
+    socket.on('bus_position_update', socketHandler);
+    socket.on('bus_location_update', socketHandler);
 
     // Fallback to DOM CustomEvents (in case other parts rebroadcast)
     const domHandler = (event: Event) => {
       const d = (event as CustomEvent).detail;
-      console.log('[useTripBusPosition] DOM event', d);
+      console.log('[useTripBusPosition] 📍 Received DOM event:', d);
       onData(d);
     };
     window.addEventListener('busPositionUpdate', domHandler as EventListener);
     window.addEventListener('busLocationUpdate', domHandler as EventListener);
 
     return () => {
+      console.log('[useTripBusPosition] Cleaning up for trip:', tripId);
       try {
-        socket?.emit('leave_trip', tripId);
-      } catch {}
-      socket?.off('bus_position_update', socketHandler);
-      socket?.off('bus_location_update', socketHandler);
+        socket.emit('leave_trip', tripId);
+      } catch (err) {
+        console.error('[useTripBusPosition] Error leaving trip room:', err);
+      }
+      socket.off('bus_position_update', socketHandler);
+      socket.off('bus_location_update', socketHandler);
       window.removeEventListener('busPositionUpdate', domHandler as EventListener);
       window.removeEventListener('busLocationUpdate', domHandler as EventListener);
     };

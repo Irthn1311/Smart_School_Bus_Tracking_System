@@ -47,10 +47,25 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot : 'button'
+  
+  // 🔥 FIX: Suppress hydration warning for browser extension attributes (fdprocessedid)
+  const buttonRef = React.useRef<HTMLButtonElement | null>(null);
+  
+  React.useEffect(() => {
+    if (buttonRef.current) {
+      // Remove fdprocessedid attribute added by browser extensions to prevent hydration mismatch
+      const element = buttonRef.current;
+      if (element.hasAttribute('fdprocessedid')) {
+        element.removeAttribute('fdprocessedid');
+      }
+    }
+  }, []);
 
   return (
     <Comp
+      ref={buttonRef as any}
       data-slot="button"
+      suppressHydrationWarning // Suppress hydration warnings for browser extension attributes
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

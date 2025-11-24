@@ -693,19 +693,18 @@ function SSBMap({
       return null;
     }
 
-    // Fallback: Tạo polyline đơn giản từ stops nếu không có polyline và không đang fetch
-    // CHỈ tạo fallback khi KHÔNG có routes với polylines (để tránh vẽ đường chim bay khi đã có đường đi thực tế)
-    const hasRoutePolylines = routes && routes.length > 0 && routes.some((r) => r.polyline && r.polyline.trim());
-    
-    if (stops && stops.length >= 2 && !isFetchingDirections && geometryReady && !hasRoutePolylines) {
-      const simplePath = createSimplePolylineFromStops(stops);
-      if (simplePath) {
-        console.log(
-          "[SSBMap] Using simple polyline from stops (no backend polyline available, no routes with polylines)"
-        );
-        return simplePath;
-      }
-    }
+    // 🔥 DISABLED: Don't show straight-line fallback to prevent "bird's eye view" routes
+    // Only show proper directions polylines fetched from Google Maps API
+    // This prevents showing straight lines when trip hasn't started yet
+    // if (stops && stops.length >= 2 && !isFetchingDirections && geometryReady && !hasRoutePolylines) {
+    //   const simplePath = createSimplePolylineFromStops(stops);
+    //   if (simplePath) {
+    //     console.log(
+    //       "[SSBMap] Using simple polyline from stops (no backend polyline available, no routes with polylines)"
+    //     );
+    //     return simplePath;
+    //   }
+    // }
 
     return null;
   }, [

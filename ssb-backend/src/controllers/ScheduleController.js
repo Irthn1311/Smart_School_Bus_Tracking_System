@@ -326,7 +326,9 @@ class ScheduleController {
       }
     } catch (err) {
       console.error("Error in ScheduleController.create:", err);
-      return response.serverError(res, "Lỗi server khi tạo lịch trình", err);
+      // 🔥 FIX: Đảm bảo error message không rỗng
+      const errorMessage = err?.message || err?.toString() || "Lỗi server khi tạo lịch trình";
+      return response.serverError(res, errorMessage, err);
     }
   }
 
