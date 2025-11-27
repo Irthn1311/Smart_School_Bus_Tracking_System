@@ -65,7 +65,6 @@ import {
 } from "@/lib/services/trip.service";
 import { useGPS } from "@/hooks/use-gps";
 import { useGPSSimulator } from "@/hooks/use-gps-simulator";
-import apiClient from "@/lib/api-client";
 import { apiClient as api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -542,7 +541,7 @@ export default function TripDetailPage() {
     console.log("  Destination:", `${destinationLat},${destinationLng}`);
 
     // 🔥 Fetch directions với waypoints - FORCE BYPASS CACHE với timestamp
-    apiClient
+    api
       .getDirections({
         origin: `${busLocation.lat},${busLocation.lng}`,
         destination: `${destinationLat},${destinationLng}`,
@@ -1256,11 +1255,54 @@ export default function TripDetailPage() {
         description: "Phụ huynh đã nhận thông báo",
       });
 
-      // Reload trip data để cập nhật summary
+      // 🔥 FIX: Reload full trip data to update student statuses and summary
       const res = await api.getTripById(tripIdNum);
       const data: any = (res as any).data || res;
-      if (data?.summary) {
-        console.log("[Driver Trip] Updated summary:", data.summary);
+      if (data) {
+        console.log("[Driver Trip] Reloaded trip after checkout:", {
+          summary: data.summary,
+          stops: data.stops?.length,
+        });
+        // Update entire trip state to refresh student statuses
+        setTrip((prev: any) => {
+          // Process stops to ensure student status updates while preserving UI fields
+          const updatedStops = prev.stops.map((prevStop: any) => {
+            const apiStop = data.stops?.find(
+              (s: any) => String(s.maDiem || s.id) === String(prevStop.id)
+            );
+            if (apiStop) {
+              return {
+                ...prevStop,
+                students:
+                  apiStop.students?.map((s: any) => ({
+                    id: String(s.maHocSinh || s.id),
+                    name:
+                      s.hoTen ||
+                      s.name ||
+                      prevStop.students?.find(
+                        (ps: any) => ps.id === String(s.maHocSinh || s.id)
+                      )?.name,
+                    status:
+                      s.trangThai === "da_don"
+                        ? "picked"
+                        : s.trangThai === "vang"
+                        ? "absent"
+                        : s.trangThai === "da_tra"
+                        ? "dropped"
+                        : "pending",
+                    avatar: s.anhDaiDien || "/placeholder.svg",
+                    parent: s.soDienThoaiPhuHuynh || "",
+                  })) || prevStop.students,
+              };
+            }
+            return prevStop;
+          });
+          return {
+            ...prev,
+            summary: data.summary,
+            stops: updatedStops,
+          };
+        });
       }
     } catch (error: any) {
       console.error("[Driver Trip] Error checking out student:", error);
@@ -1338,12 +1380,54 @@ export default function TripDetailPage() {
         description: "Phụ huynh đã nhận thông báo",
       });
 
-      // Reload trip data để cập nhật summary
+      // 🔥 FIX: Reload full trip data to update student statuses and summary
       const res = await api.getTripById(tripIdNum);
       const data: any = (res as any).data || res;
-      if (data?.summary) {
-        // Update summary nếu có
-        console.log("[Driver Trip] Updated summary:", data.summary);
+      if (data) {
+        console.log("[Driver Trip] Reloaded trip after checkin:", {
+          summary: data.summary,
+          stops: data.stops?.length,
+        });
+        // Update entire trip state to refresh student statuses
+        setTrip((prev: any) => {
+          // Process stops to ensure student status updates while preserving UI fields
+          const updatedStops = prev.stops.map((prevStop: any) => {
+            const apiStop = data.stops?.find(
+              (s: any) => String(s.maDiem || s.id) === String(prevStop.id)
+            );
+            if (apiStop) {
+              return {
+                ...prevStop,
+                students:
+                  apiStop.students?.map((s: any) => ({
+                    id: String(s.maHocSinh || s.id),
+                    name:
+                      s.hoTen ||
+                      s.name ||
+                      prevStop.students?.find(
+                        (ps: any) => ps.id === String(s.maHocSinh || s.id)
+                      )?.name,
+                    status:
+                      s.trangThai === "da_don"
+                        ? "picked"
+                        : s.trangThai === "vang"
+                        ? "absent"
+                        : s.trangThai === "da_tra"
+                        ? "dropped"
+                        : "pending",
+                    avatar: s.anhDaiDien || "/placeholder.svg",
+                    parent: s.soDienThoaiPhuHuynh || "",
+                  })) || prevStop.students,
+              };
+            }
+            return prevStop;
+          });
+          return {
+            ...prev,
+            summary: data.summary,
+            stops: updatedStops,
+          };
+        });
       }
     } catch (error: any) {
       console.error("[Driver Trip] Error checking in student:", error);
@@ -1424,11 +1508,54 @@ export default function TripDetailPage() {
         description: "Phụ huynh đã nhận thông báo",
       });
 
-      // Reload trip data để cập nhật summary
+      // 🔥 FIX: Reload full trip data to update student statuses and summary
       const res = await api.getTripById(tripIdNum);
       const data: any = (res as any).data || res;
-      if (data?.summary) {
-        console.log("[Driver Trip] Updated summary:", data.summary);
+      if (data) {
+        console.log("[Driver Trip] Reloaded trip after marking absent:", {
+          summary: data.summary,
+          stops: data.stops?.length,
+        });
+        // Update entire trip state to refresh student statuses
+        setTrip((prev: any) => {
+          // Process stops to ensure student status updates while preserving UI fields
+          const updatedStops = prev.stops.map((prevStop: any) => {
+            const apiStop = data.stops?.find(
+              (s: any) => String(s.maDiem || s.id) === String(prevStop.id)
+            );
+            if (apiStop) {
+              return {
+                ...prevStop,
+                students:
+                  apiStop.students?.map((s: any) => ({
+                    id: String(s.maHocSinh || s.id),
+                    name:
+                      s.hoTen ||
+                      s.name ||
+                      prevStop.students?.find(
+                        (ps: any) => ps.id === String(s.maHocSinh || s.id)
+                      )?.name,
+                    status:
+                      s.trangThai === "da_don"
+                        ? "picked"
+                        : s.trangThai === "vang"
+                        ? "absent"
+                        : s.trangThai === "da_tra"
+                        ? "dropped"
+                        : "pending",
+                    avatar: s.anhDaiDien || "/placeholder.svg",
+                    parent: s.soDienThoaiPhuHuynh || "",
+                  })) || prevStop.students,
+              };
+            }
+            return prevStop;
+          });
+          return {
+            ...prev,
+            summary: data.summary,
+            stops: updatedStops,
+          };
+        });
       }
     } catch (error: any) {
       console.error("[Driver Trip] Error marking student absent:", error);
@@ -1599,6 +1726,22 @@ export default function TripDetailPage() {
 
   const leaveCurrentStop = async () => {
     if (!trip || !trip.stops || !currentStop) return;
+
+    // 🔥 FIX: Validate all students at current stop are marked (picked or absent)
+    const studentsAtStop = (currentStop as any).students || [];
+    const unmarkedStudents = studentsAtStop.filter(
+      (student: any) => student.status === "pending"
+    );
+
+    if (unmarkedStudents.length > 0) {
+      toast({
+        title: "⚠️ Chưa thể rời điểm dừng",
+        description: `Còn ${unmarkedStudents.length} học sinh chưa được đánh dấu. Vui lòng đánh dấu "Đã đón" hoặc "Vắng" cho tất cả học sinh.`,
+        variant: "destructive",
+        duration: 5000,
+      });
+      return; // Block leaving stop
+    }
 
     // Chuyển sang điểm tiếp theo
     if (trip.currentStop < trip.stops.length - 1) {
@@ -1932,6 +2075,28 @@ export default function TripDetailPage() {
 
   const finishTrip = async () => {
     if (!trip || !trip.stops) return;
+
+    // 🔥 FIX: Validate all students at final stop are marked
+    if (currentStop) {
+      const studentsAtStop = (currentStop as any).students || [];
+      const unmarkedStudents = studentsAtStop.filter(
+        (student: any) => student.status === "pending"
+      );
+
+      if (unmarkedStudents.length > 0) {
+        toast({
+          title: "⚠️ Chưa thể kết thúc chuyến đi",
+          description: `Còn ${
+            unmarkedStudents.length
+          } học sinh tại điểm cuối chưa được đánh dấu. Vui lòng đánh dấu "${
+            tripType === "tra_chieu" ? "Đã trả" : "Đã đón"
+          }" hoặc "Vắng" cho tất cả học sinh.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+        return; // Block finishing trip
+      }
+    }
 
     try {
       setProcessing(true);
@@ -3063,63 +3228,69 @@ export default function TripDetailPage() {
               />
             )}
 
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle>Thao tác</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button
-                  size="lg"
-                  variant={primaryCta.variant}
-                  onClick={primaryCta.onClick}
-                  disabled={processing}
-                  className={cn("w-full h-12 rounded-lg", primaryCta.className)}
-                >
-                  <primaryCta.icon className="w-5 h-5 mr-2" />
-                  {processing ? "Đang xử lý…" : primaryCta.label}
-                </Button>
-                {/* P1 Fix: Cancel Trip Button */}
-                {tripStatus === "dang_chay" && (
+            {/* 🔥 FIX: Ẩn phần Thao tác khi chuyến đi đã hoàn thành */}
+            {tripStatus !== "hoan_thanh" && tripStatus !== "da_hoan_thanh" && (
+              <Card className="border-border/50">
+                <CardHeader>
+                  <CardTitle>Thao tác</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <Button
                     size="lg"
-                    variant="outline"
-                    onClick={() => setIsCancelDialogOpen(true)}
+                    variant={primaryCta.variant}
+                    onClick={primaryCta.onClick}
                     disabled={processing}
-                    className="w-full h-12 rounded-lg border-destructive text-destructive hover:bg-destructive/10"
+                    className={cn(
+                      "w-full h-12 rounded-lg",
+                      primaryCta.className
+                    )}
                   >
-                    <XCircle className="w-5 h-5 mr-2" />
-                    Hủy chuyến đi
+                    <primaryCta.icon className="w-5 h-5 mr-2" />
+                    {processing ? "Đang xử lý…" : primaryCta.label}
                   </Button>
-                )}
-                {/* Cancel Trip Confirmation Dialog */}
-                <AlertDialog
-                  open={isCancelDialogOpen}
-                  onOpenChange={setIsCancelDialogOpen}
-                >
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        Xác nhận hủy chuyến đi
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Bạn có chắc chắn muốn hủy chuyến đi này? Hành động này
-                        không thể hoàn tác. Phụ huynh sẽ nhận được thông báo về
-                        việc hủy chuyến.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Không</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleCancelTrip}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Xác nhận hủy
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </CardContent>
-            </Card>
+                  {/* P1 Fix: Cancel Trip Button */}
+                  {tripStatus === "dang_chay" && (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => setIsCancelDialogOpen(true)}
+                      disabled={processing}
+                      className="w-full h-12 rounded-lg border-destructive text-destructive hover:bg-destructive/10"
+                    >
+                      <XCircle className="w-5 h-5 mr-2" />
+                      Hủy chuyến đi
+                    </Button>
+                  )}
+                  {/* Cancel Trip Confirmation Dialog */}
+                  <AlertDialog
+                    open={isCancelDialogOpen}
+                    onOpenChange={setIsCancelDialogOpen}
+                  >
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Xác nhận hủy chuyến đi
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Bạn có chắc chắn muốn hủy chuyến đi này? Hành động này
+                          không thể hoàn tác. Phụ huynh sẽ nhận được thông báo
+                          về việc hủy chuyến.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Không</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleCancelTrip}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Xác nhận hủy
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

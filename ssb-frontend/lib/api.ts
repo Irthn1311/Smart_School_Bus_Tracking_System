@@ -1017,6 +1017,20 @@ class ApiClient {
       body: JSON.stringify(passwordData),
     });
   }
+
+  // Get directions from Google Maps API via backend
+  async getDirections(params: {
+    origin: string;
+    destination: string;
+    waypoints?: Array<{ location: string }>;
+    mode?: string;
+    vehicleType?: string;
+  }) {
+    return this.request("/maps/directions", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
 }
 
 // Create singleton instance
