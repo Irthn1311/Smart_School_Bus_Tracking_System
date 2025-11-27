@@ -1,1 +1,0 @@
-Đây là js định nghĩa mô hình dữ liệu MySQL cho từng entity

@@ -1,1 +1,0 @@
-Đây là js định nghĩa các endpoint RESTful cho từng module
