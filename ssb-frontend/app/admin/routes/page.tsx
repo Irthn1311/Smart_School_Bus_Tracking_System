@@ -260,25 +260,9 @@ export default function RoutesPage() {
 
   // Show RouteBuilder in fullscreen when creating/editing
   if (isAddDialogOpen || isEditDialogOpen) {
-    // 🔥 Đảm bảo stops có đầy đủ thông tin khi edit
-    const stopsForEdit = isEditDialogOpen && editingRoute
-      ? (editingRoute.raw?.diemDung || editingRoute.raw?.stops || []).map((stop: any) => ({
-          ...stop,
-          tenDiem: stop.tenDiem || stop.name || '',
-          diaChi: stop.diaChi || stop.address || '',
-          viDo: stop.viDo || stop.latitude,
-          kinhDo: stop.kinhDo || stop.longitude,
-          latitude: stop.viDo || stop.latitude,
-          longitude: stop.kinhDo || stop.longitude,
-          thuTu: stop.thuTu || stop.sequence,
-          thoiGianDung: stop.thoiGianDung || stop.dwell_seconds || 0,
-        }))
-      : undefined;
-    
     return (
       <DashboardLayout sidebar={<AdminSidebar />}>
         <RouteBuilder
-          key={isEditDialogOpen && editingRoute ? `edit-${editingRoute.id}` : 'create'} // 🔥 Force re-mount khi edit route khác
           mode={isEditDialogOpen ? 'edit' : 'create'}
           initialRoute={
             isEditDialogOpen && editingRoute
@@ -287,7 +271,7 @@ export default function RoutesPage() {
                   name: editingRoute.name,
                   diemBatDau: editingRoute.raw?.diemBatDau,
                   diemKetThuc: editingRoute.raw?.diemKetThuc,
-                  stops: stopsForEdit,
+                  stops: editingRoute.raw?.diemDung || editingRoute.raw?.stops,
                 }
               : undefined
           }
@@ -614,7 +598,7 @@ export default function RoutesPage() {
                                  {route.raw?.routeType === 'di' ? t("routes.outbound") : t("routes.return")}
                                </Badge>
                              )}
-                             {((route.stopsCount ?? 0) < 2) && (
+                             {route.stopsCount < 2 && (
                                <Badge
                                  variant="outline"
                                  className="border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/20"

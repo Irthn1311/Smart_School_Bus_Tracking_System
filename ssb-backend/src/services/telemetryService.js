@@ -572,29 +572,27 @@ class TelemetryService {
 
               if (parentIds.length > 0) {
                 const route = await TuyenDuongModel.getById(schedule.maTuyen);
-                const XeBuytModel = (await import("../models/XeBuytModel.js")).default;
-                const bus = await XeBuytModel.getById(schedule.maXe);
 
                 await ThongBaoModel.createMultiple({
                   danhSachNguoiNhan: parentIds,
-                  tieuDe: "🚏 Xe sắp đến điểm dừng",
-                  noiDung: `🚏 XE GẦN TỚI ĐIỂM DỪNG!\n\n📍 Điểm dừng: ${
+                  tieuDe: "🚏 Xe đến gần điểm dừng",
+                  noiDung: `Xe buýt tuyến ${route?.tenTuyen || "N/A"} đang đến gần ${
                     stop.tenDiem
-                  }\n📏 Còn cách: ${Math.round(distance)}m\n🚌 Xe: ${bus?.bienSoXe || "N/A"} - Tuyến: ${route?.tenTuyen || "N/A"}\n\n⏰ Con bạn sẽ được đón trong giây lát. Vui lòng chuẩn bị!`,
-                  loaiThongBao: "chuyen_di",
+                  } (cách ${Math.round(distance)}m). Con bạn sẽ được đón trong giây lát.`,
+                  loaiThongBao: "approach_stop",
                 });
 
                 // Emit notification:new event to each parent
                 for (const parentId of parentIds) {
                   io.to(`user-${parentId}`).emit("notification:new", {
                     maNguoiNhan: parentId,
-                    tieuDe: "🚏 Xe gần tới điểm dừng",
-                    noiDung: `Xe buýt ${
-                      bus?.bienSoXe || "N/A"
-                    } gần tới ${stop.tenDiem}, còn cách ${Math.round(
+                    tieuDe: "🚏 Xe đến gần điểm dừng",
+                    noiDung: `Xe buýt tuyến ${
+                      route?.tenTuyen || "N/A"
+                    } đang đến gần ${stop.tenDiem} (cách ${Math.round(
                       distance
-                    )}m. Con bạn sẽ được đón trong giây lát.`,
-                    loaiThongBao: "chuyen_di",
+                    )}m). Con bạn sẽ được đón trong giây lát.`,
+                    loaiThongBao: "approach_stop",
                     tripId: tripId,
                     stopId: stop.maDiem,
                     stopSequence: stop.sequence,
@@ -735,156 +733,10 @@ class TelemetryService {
         console.log(
           `🚨 Delay alert sent for trip ${tripId} (will send again after 3 minutes)`
         );
-        
-        // 🔥 NEW: Lưu thông báo delay vào database (chỉ lần đầu)
-        const isFirstAlert = !lastSent; // Chỉ lưu lần đầu
-        if (isFirstAlert) {
-          try {
-            const ThongBaoModel = (await import("../models/ThongBaoModel.js")).default;
-            const NguoiDungModel = (await import("../models/NguoiDungModel.js")).default;
-            const TrangThaiHocSinhModel = (await import("../models/TrangThaiHocSinhModel.js")).default;
-            
-            // Get bus and route info
-            const bus = await XeBuytModel.getById(schedule.maXe);
-            const route = await TuyenDuongModel.getById(schedule.maTuyen);
-            
-            // 1. Thông báo cho ADMIN
-            const admins = await NguoiDungModel.getByRole("quan_tri");
-            const adminIds = admins.map((a) => a.maNguoiDung).filter((id) => id);
-            
-            if (adminIds.length > 0) {
-              await ThongBaoModel.createMultiple({
-                danhSachNguoiNhan: adminIds,
-                tieuDe: `⏰ Xe ${bus?.bienSoXe || 'N/A'} trễ ${Math.round(delayMin)} phút`,
-                noiDung: `⏰ CẢNH BÁO TRỄ\n\n🚌 Xe: ${bus?.bienSoXe || "N/A"}\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n⏱️ Trễ: ${Math.round(delayMin)} phút\n\n📍 Chuyến #${tripId} chậm hơn lịch trình.`,
-                loaiThongBao: "su_co",
-              });
-              
-              console.log(`🔔 [DELAY DEBUG] Emitting delay_alert to ADMIN`);
-              console.log(`   Room: role-quan_tri`);
-              console.log(`   Admin count: ${adminIds.length}`);
-              console.log(`   Trip: #${tripId}`);
-              console.log(`   Delay: ${Math.round(delayMin)} minutes`);
-              
-              io.to("role-quan_tri").emit("notification:new", {
-                tieuDe: `⏰ Xe ${bus?.bienSoXe || 'N/A'} trễ ${Math.round(delayMin)}p`,
-                noiDung: `Chuyến #${tripId} trễ ${Math.round(delayMin)} phút`,
-                loaiThongBao: "su_co",
-                thoiGianTao: new Date().toISOString(),
-              });
-              
-              console.log(`✅ Sent delay notification to ${adminIds.length} admins`);
-            }
-            
-            // 2. Thông báo cho PHỤ HUYNH
-            const students = await TrangThaiHocSinhModel.getByTripId(tripId);
-            const parentIds = [
-              ...new Set(
-                students
-                  .map((s) => s.maPhuHuynh)
-                  .filter((pid) => pid)
-              ),
-            ];
-            
-            if (parentIds.length > 0) {
-              await ThongBaoModel.createMultiple({
-                danhSachNguoiNhan: parentIds,
-                tieuDe: "⏰ Xe buýt trễ hơn dự kiến",
-                noiDung: `⏰ XE TRỄ HƠN DỰ KIẾN\n\n🚌 Xe: ${bus?.bienSoXe || "N/A"}\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n⏱️ Dự kiến trễ: ${Math.round(delayMin)} phút\n\n📞 Xin lỗi vì sự bất tiện. Xe sẽ đến sớm nhất có thể.`,
-                loaiThongBao: "su_co",
-              });
-              
-              console.log(`🔔 [DELAY DEBUG] Emitting delay_alert to ${parentIds.length} PARENTS`);
-              parentIds.forEach((parentId) => {
-                const roomName = `user-${parentId}`;
-                console.log(`   Emitting to parent room: ${roomName}`);
-                io.to(roomName).emit("notification:new", {
-                  tieuDe: "⏰ Xe buýt trễ hơn",
-                  noiDung: `Xe trễ khoảng ${Math.round(delayMin)} phút`,
-                  loaiThongBao: "su_co",
-                  thoiGianTao: new Date().toISOString(),
-                });
-              });
-              
-              console.log(`✅ Sent delay notification to ${parentIds.length} parents`);
-            }
-          } catch (notifError) {
-            console.warn(
-              "⚠️  Failed to create delay notifications:",
-              notifError.message
-            );
-          }
-        }
 
-        // 🔥 NEW: Lưu thông báo delay vào database cho admin và phụ huynh
-        try {
-          const ThongBaoModel = (await import("../models/ThongBaoModel.js")).default;
-          const NguoiDungModel = (await import("../models/NguoiDungModel.js")).default;
-          const TrangThaiHocSinhModel = (await import("../models/TrangThaiHocSinhModel.js")).default;
-          
-          // Get bus and route info
-          const bus = await XeBuytModel.getById(schedule.maXe);
-          const route = await TuyenDuongModel.getById(schedule.maTuyen);
-          
-          // 1. Thông báo cho ADMIN
-          const admins = await NguoiDungModel.getByRole("quan_tri");
-          const adminIds = admins.map((a) => a.maNguoiDung).filter((id) => id);
-          
-          if (adminIds.length > 0) {
-            await ThongBaoModel.createMultiple({
-              danhSachNguoiNhan: adminIds,
-              tieuDe: `⏰ Xe ${bus?.bienSoXe || 'N/A'} đang trễ`,
-              noiDung: `⏰ CẢNH BÁO TRỄ\n\n🚌 Xe: ${bus?.bienSoXe || "N/A"}\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n⏱️ Trễ: ${Math.round(delayMin)} phút\n\n📍 Chuyến đi #${tripId} đang chậm hơn so với lịch trình dự kiến.`,
-              loaiThongBao: "su_co",
-            });
-            
-            // Emit to admin room
-            io.to("role-quan_tri").emit("notification:new", {
-              tieuDe: `⏰ Xe ${bus?.bienSoXe || 'N/A'} đang trễ`,
-              noiDung: `Chuyến #${tripId} trễ ${Math.round(delayMin)} phút`,
-              loaiThongBao: "su_co",
-              thoiGianTao: new Date().toISOString(),
-            });
-            
-            console.log(`📬 Sent delay notification to ${adminIds.length} admins`);
-          }
-          
-          // 2. Thông báo cho PHỤ HUYNH (chỉ lần đầu tiên)
-          const students = await TrangThaiHocSinhModel.getByTripId(tripId);
-          const parentIds = [
-            ...new Set(
-              students
-                .map((s) => s.maPhuHuynh)
-                .filter((pid) => pid)
-            ),
-          ];
-          
-          if (parentIds.length > 0) {
-            await ThongBaoModel.createMultiple({
-              danhSachNguoiNhan: parentIds,
-              tieuDe: "⏰ Xe buýt đang trễ",
-              noiDung: `⏰ XE ĐANG TRỄ\n\n🚌 Xe: ${bus?.bienSoXe || "N/A"}\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n⏱️ Dự kiến trễ: ${Math.round(delayMin)} phút\n\n📞 Xin lỗi vì sự chậm trễ. Chúng tôi sẽ cập nhật thông tin sớm nhất.`,
-              loaiThongBao: "su_co",
-            });
-            
-            // Emit to each parent
-            parentIds.forEach((parentId) => {
-              io.to(`user-${parentId}`).emit("notification:new", {
-                tieuDe: "⏰ Xe buýt đang trễ",
-                noiDung: `Xe ${bus?.bienSoXe || 'N/A'} dự kiến trễ ${Math.round(delayMin)} phút`,
-                loaiThongBao: "su_co",
-                thoiGianTao: new Date().toISOString(),
-              });
-            });
-            
-            console.log(`📬 Sent delay notification to ${parentIds.length} parents`);
-          }
-        } catch (notifError) {
-          console.warn(
-            "⚠️  Failed to create delay notifications:",
-            notifError.message
-          );
-        }
+        // 📬 M5: NO LONGER CREATE NOTIFICATION - Parents see banner via WebSocket
+        // Frontend will display persistent banner that updates delay_minutes in real-time
+        // Only driver receives notification every 3 minutes via WebSocket "delay_alert" event
 
         // 🔥 Day 5: Send Push Notification to parents
         try {

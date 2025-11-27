@@ -229,15 +229,11 @@ export default function ParentDashboard() {
         notifType = "success";
       }
 
-      // 🔥 NEW: Show toast with larger, more visible format
+      // Show toast
       toast({
         title: title,
         description: content,
         variant: notifType === "warning" ? "destructive" : "default",
-        duration: notifType === "warning" ? 10000 : 7000, // Warnings stay longer
-        className: notifType === "warning" 
-          ? "text-lg font-bold border-2 border-red-500" 
-          : "text-lg font-semibold",
       });
 
       // Add to recent notifications list (max 10 items)
@@ -1240,13 +1236,13 @@ export default function ParentDashboard() {
               </CardContent>
             </Card>
 
-            {/* 🔥 NEW: Enhanced Recent Notifications with larger, more visible cards */}
-            <Card className="border-border/50 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <span className="font-bold">📢 Thông báo gần đây</span>
+            {/* Recent Notifications */}
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Thông báo gần đây</span>
                   {unreadCount > 0 && (
-                    <Badge variant="destructive" className="text-sm font-bold animate-pulse">
+                    <Badge variant="secondary" className="text-xs">
                       {unreadCount} mới
                     </Badge>
                   )}
@@ -1258,7 +1254,7 @@ export default function ParentDashboard() {
                     Chưa có thông báo nào
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {recentNotifications.map((notification, index) => {
                       const Icon =
                         notification.type === "success"
@@ -1281,29 +1277,29 @@ export default function ParentDashboard() {
                           }
                         >
                           <div
-                            className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                               notification.type === "success"
-                                ? "bg-green-500/20"
+                                ? "bg-green-500/10"
                                 : notification.type === "warning"
-                                ? "bg-orange-500/20"
-                                : "bg-primary/20"
+                                ? "bg-orange-500/10"
+                                : "bg-primary/10"
                             }`}
                           >
                             <Icon
-                              className={`w-6 h-6 ${
+                              className={`w-4 h-4 ${
                                 notification.type === "success"
-                                  ? "text-green-600 dark:text-green-400"
+                                  ? "text-green-500"
                                   : notification.type === "warning"
-                                  ? "text-orange-600 dark:text-orange-400"
+                                  ? "text-orange-500"
                                   : "text-primary"
                               }`}
                             />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-base font-bold text-foreground leading-snug">
+                            <p className="text-sm font-medium text-foreground">
                               {notification.title}
                             </p>
-                            <p className="text-sm text-muted-foreground mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               {notification.time}
                             </p>
                           </div>

@@ -384,25 +384,3 @@ class SocketService {
 // Create singleton instance
 export const socketService = new SocketService();
 export default socketService;
-
-// Export socket instance for direct access (for event listeners)
-export const socket = {
-  on: (event: string, callback: (...args: any[]) => void) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.on(event, callback);
-    }
-  },
-  off: (event: string, callback?: (...args: any[]) => void) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.off(event, callback);
-    }
-  },
-  emit: (event: string, ...args: any[]) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.emit(event, ...args);
-    }
-  },
-};

@@ -89,32 +89,12 @@ class ScheduleService {
     if (!VALID_LOAI_CHUYEN.includes(loaiChuyen))
       throw new Error("INVALID_TRIP_TYPE");
 
-    // Validate ngày chạy không được là quá khứ
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const scheduleDate = new Date(ngayChay);
-    scheduleDate.setHours(0, 0, 0, 0);
-    
-    if (scheduleDate < today) {
-      throw new Error("INVALID_DATE_PAST");
-    }
-
     const route = await TuyenDuongModel.getById(maTuyen);
     if (!route) throw new Error("ROUTE_NOT_FOUND");
     const bus = await XeBuytModel.getById(maXe);
     if (!bus) throw new Error("BUS_NOT_FOUND");
     const driver = await TaiXeModel.getById(maTaiXe);
     if (!driver) throw new Error("DRIVER_NOT_FOUND");
-
-    // Validate bus đang hoạt động
-    if (bus.trangThai !== "hoat_dong") {
-      throw new Error("BUS_NOT_ACTIVE");
-    }
-
-    // Validate driver đang hoạt động
-    if (driver.trangThai !== "hoat_dong") {
-      throw new Error("DRIVER_NOT_ACTIVE");
-    }
 
     const conflicts = await LichTrinhModel.checkConflict(
       maXe,
