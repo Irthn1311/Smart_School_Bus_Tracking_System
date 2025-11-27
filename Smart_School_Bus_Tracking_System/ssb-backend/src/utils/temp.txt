@@ -1,1 +1,0 @@
-Đây là js chứa các hàm tiện ích (formatTime, jwtHelper, responseHelper)

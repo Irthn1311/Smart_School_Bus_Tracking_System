@@ -73,7 +73,7 @@
     "@types/google.maps": "^3.58.1",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.5",
-    "@types/morgan": "^1.9.10",
+    "@types/morgan": "^1.9.9",
     "@types/node": "^20.19.24",
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^6.19.1",

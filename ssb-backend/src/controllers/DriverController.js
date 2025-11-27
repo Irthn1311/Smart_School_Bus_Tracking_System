@@ -561,14 +561,7 @@ class DriverController {
   static async getSchedules(req, res) {
     try {
       const { id } = req.params;
-      const { 
-        date, 
-        status, 
-        dateRange, // 'today', 'thisWeek', hoặc 'custom'
-        fromDate,  // YYYY-MM-DD (cho custom)
-        toDate,    // YYYY-MM-DD (cho custom)
-        tripStatus // Trạng thái trip: 'chua_khoi_hanh', 'dang_chay', 'hoan_thanh', 'huy'
-      } = req.query;
+      const { date, status } = req.query;
 
       if (!id) {
         return res.status(400).json({
@@ -588,118 +581,22 @@ class DriverController {
 
       let schedules = await LichTrinhModel.getByDriver(id);
 
-      // Tính toán date range
-      let startDate = null;
-      let endDate = null;
-      
-      if (dateRange === 'today') {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        startDate = today;
-        endDate = new Date(today);
-        endDate.setHours(23, 59, 59, 999);
-      } else if (dateRange === 'thisWeek') {
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday
-        startDate = new Date(today.setDate(diff));
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 6);
-        endDate.setHours(23, 59, 59, 999);
-      } else if (dateRange === 'custom' && fromDate && toDate) {
-        startDate = new Date(fromDate);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(toDate);
-        endDate.setHours(23, 59, 59, 999);
-      } else if (date) {
-        // Backward compatibility: single date filter
-        startDate = new Date(date);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(date);
-        endDate.setHours(23, 59, 59, 999);
+      // Lọc theo ngày
+      if (date) {
+        schedules = schedules.filter((schedule) => schedule.ngayChay === date);
       }
 
-      // Lọc theo date range
-      if (startDate && endDate) {
-        schedules = schedules.filter((schedule) => {
-          const scheduleDate = new Date(schedule.ngayChay);
-          return scheduleDate >= startDate && scheduleDate <= endDate;
-        });
-      }
-
-      // Lấy thông tin trip cho mỗi schedule và thêm trip status
-      const schedulesWithTrips = await Promise.all(
-        schedules.map(async (schedule) => {
-          try {
-            // Tìm trip tương ứng với schedule này
-            const trip = await ChuyenDiModel.getByScheduleIdAndDate(
-              schedule.maLichTrinh,
-              schedule.ngayChay
-            );
-
-            // Đếm số học sinh trong schedule
-            const ScheduleStudentStopModel = (await import("../models/ScheduleStudentStopModel.js")).default;
-            const students = await ScheduleStudentStopModel.getByScheduleId(schedule.maLichTrinh);
-            
-            return {
-              ...schedule,
-              tripStatus: trip ? trip.trangThai : 'chua_khoi_hanh',
-              tripId: trip ? trip.maChuyen : null,
-              gioBatDauThucTe: trip ? trip.gioBatDauThucTe : null,
-              gioKetThucThucTe: trip ? trip.gioKetThucThucTe : null,
-              totalStudents: students ? students.length : 0,
-            };
-          } catch (err) {
-            console.error(`Error processing schedule ${schedule.maLichTrinh}:`, err);
-            return {
-              ...schedule,
-              tripStatus: 'chua_khoi_hanh',
-              tripId: null,
-              gioBatDauThucTe: null,
-              gioKetThucThucTe: null,
-              totalStudents: 0,
-            };
-          }
-        })
-      );
-
-      // Lọc theo trip status nếu có
-      let filteredSchedules = schedulesWithTrips;
-      if (tripStatus) {
-        filteredSchedules = schedulesWithTrips.filter(
-          (schedule) => schedule.tripStatus === tripStatus
-        );
-      }
-
-      // Lọc theo status (backward compatibility - lọc theo schedule status)
+      // Lọc theo trạng thái
       if (status) {
-        filteredSchedules = filteredSchedules.filter(
-          (schedule) => schedule.dangApDung === (status === 'active')
+        schedules = schedules.filter(
+          (schedule) => schedule.trangThai === status
         );
       }
-
-      // Sắp xếp theo ngày và giờ
-      filteredSchedules.sort((a, b) => {
-        const dateA = new Date(`${a.ngayChay} ${a.gioKhoiHanh}`);
-        const dateB = new Date(`${b.ngayChay} ${b.gioKhoiHanh}`);
-        return dateA - dateB;
-      });
 
       res.status(200).json({
         success: true,
-        data: filteredSchedules,
+        data: schedules,
         message: "Lấy lịch trình tài xế thành công",
-        meta: {
-          total: filteredSchedules.length,
-          dateRange: dateRange || (date ? 'single' : 'all'),
-          filters: {
-            dateRange,
-            fromDate,
-            toDate,
-            tripStatus,
-          },
-        },
       });
     } catch (error) {
       console.error("Error in DriverController.getSchedules:", error);
@@ -750,99 +647,6 @@ class DriverController {
       res.status(500).json({
         success: false,
         message: "Lỗi server khi lấy thống kê tài xế",
-        error: error.message,
-      });
-    }
-  }
-
-  // Lấy chi tiết lịch trình với route stops và students
-  static async getScheduleDetail(req, res) {
-    try {
-      const { id, scheduleId } = req.params;
-      const userId = req.user?.userId;
-
-      // Nếu là driver, chỉ được xem schedule của chính mình
-      if (req.user?.role === "tai_xe" && Number(id) !== Number(userId)) {
-        return res.status(403).json({
-          success: false,
-          message: "Bạn chỉ có thể xem lịch trình của chính mình",
-        });
-      }
-
-      if (!scheduleId) {
-        return res.status(400).json({
-          success: false,
-          message: "Mã lịch trình là bắt buộc",
-        });
-      }
-
-      // Lấy thông tin schedule
-      const schedule = await LichTrinhModel.getById(scheduleId);
-      if (!schedule) {
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy lịch trình",
-        });
-      }
-
-      // Kiểm tra schedule thuộc về driver này
-      if (Number(schedule.maTaiXe) !== Number(id)) {
-        return res.status(403).json({
-          success: false,
-          message: "Lịch trình này không thuộc về tài xế này",
-        });
-      }
-
-      // Sử dụng ScheduleService để lấy đầy đủ thông tin
-      const ScheduleService = (await import("../services/ScheduleService.js")).default;
-      const scheduleDetail = await ScheduleService.getById(scheduleId);
-
-      // Lấy thông tin trip nếu có
-      const trip = await ChuyenDiModel.getByScheduleIdAndDate(
-        scheduleId,
-        schedule.ngayChay
-      );
-
-      // Lấy thông tin route, bus, driver
-      const TuyenDuongModel = (await import("../models/TuyenDuongModel.js")).default;
-      const XeBuytModel = (await import("../models/XeBuytModel.js")).default;
-      
-      const routeInfo = await TuyenDuongModel.getById(scheduleDetail.maTuyen);
-      const busInfo = await XeBuytModel.getById(scheduleDetail.maXe);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          ...scheduleDetail,
-          routeInfo: {
-            maTuyen: routeInfo?.maTuyen,
-            tenTuyen: routeInfo?.tenTuyen,
-            diemBatDau: routeInfo?.diemBatDau,
-            diemKetThuc: routeInfo?.diemKetThuc,
-            thoiGianUocTinh: routeInfo?.thoiGianUocTinh,
-            polyline: routeInfo?.polyline,
-          },
-          busInfo: {
-            maXe: busInfo?.maXe,
-            bienSoXe: busInfo?.bienSoXe,
-            dongXe: busInfo?.dongXe,
-            sucChua: busInfo?.sucChua,
-          },
-          trip: trip ? {
-            maChuyen: trip.maChuyen,
-            trangThai: trip.trangThai,
-            gioBatDauThucTe: trip.gioBatDauThucTe,
-            gioKetThucThucTe: trip.gioKetThucThucTe,
-            ghiChu: trip.ghiChu,
-          } : null,
-        },
-        message: "Lấy chi tiết lịch trình thành công",
-      });
-    } catch (error) {
-      console.error("Error in DriverController.getScheduleDetail:", error);
-      res.status(500).json({
-        success: false,
-        message: "Lỗi server khi lấy chi tiết lịch trình",
         error: error.message,
       });
     }

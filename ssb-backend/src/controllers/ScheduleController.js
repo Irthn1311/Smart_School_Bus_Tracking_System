@@ -322,21 +322,6 @@ class ScheduleController {
             })) || [{ field: "students", message: "Có lỗi trong phân công học sinh" }]
           );
         }
-        if (serviceError.message === "INVALID_DATE_PAST") {
-          return response.validationError(res, "Ngày chạy không được là quá khứ", [
-            { field: "ngayChay", message: "Ngày chạy phải là hôm nay hoặc tương lai" }
-          ]);
-        }
-        if (serviceError.message === "BUS_NOT_ACTIVE") {
-          return response.validationError(res, "Xe buýt không đang hoạt động", [
-            { field: "maXe", message: "Xe buýt phải đang hoạt động" }
-          ]);
-        }
-        if (serviceError.message === "DRIVER_NOT_ACTIVE") {
-          return response.validationError(res, "Tài xế không đang hoạt động", [
-            { field: "maTaiXe", message: "Tài xế phải đang hoạt động" }
-          ]);
-        }
         throw serviceError;
       }
     } catch (err) {
@@ -507,7 +492,7 @@ class ScheduleController {
       const validStatuses = [
         "chua_khoi_hanh",
         "dang_chay",
-        "hoan_thanh",
+        "da_hoan_thanh",
         "bi_huy",
       ];
       if (!validStatuses.includes(trangThai)) {

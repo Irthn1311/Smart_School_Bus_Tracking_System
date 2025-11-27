@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   BarChart3,
   TrendingUp,
@@ -100,9 +101,9 @@ export default function ReportsPage() {
         const derived = {
           totalTrips,
           onTimeRate,
-          totalStudents: 490, // TODO: replace when BE provides
-          avgDelay: 3.2, // TODO: replace when BE provides
-          incidents: 53, // TODO: replace when BE provides
+          totalStudents: Number(data.students?.total || 0),
+          avgDelay: Number(trips.avgDelayMinutes || data.trips?.avgDelayMinutes || 0),
+          incidents: Number(data.incidents?.total || 0),
           activeBuses,
         }
         if (mounted) setStats(derived)
@@ -232,45 +233,82 @@ export default function ReportsPage() {
   }
 
   // Mock data for charts
-  const tripTrendData = [
-    { date: "T2", trips: 45, onTime: 42, late: 3 },
-    { date: "T3", trips: 48, onTime: 45, late: 3 },
-    { date: "T4", trips: 46, onTime: 43, late: 3 },
-    { date: "T5", trips: 50, onTime: 46, late: 4 },
-    { date: "T6", trips: 47, onTime: 45, late: 2 },
-    { date: "T7", trips: 44, onTime: 42, late: 2 },
-    { date: "CN", trips: 0, onTime: 0, late: 0 },
-  ]
+  const [tripTrendData, setTripTrendData] = useState<any[]>([])
 
-  const busUtilizationData = [
-    { name: "29B-12345", trips: 48, utilization: 96 },
-    { name: "29B-12346", trips: 45, utilization: 90 },
-    { name: "29B-12347", trips: 42, utilization: 84 },
-    { name: "29B-12348", trips: 40, utilization: 80 },
-    { name: "29B-12349", trips: 38, utilization: 76 },
-  ]
+  const [busUtilizationData, setBusUtilizationData] = useState<any[]>([])
 
-  const attendanceData = [
-    { name: "Có mặt", value: 450, color: "#10b981" },
-    { name: "Vắng mặt", value: 25, color: "#ef4444" },
-    { name: "Đi muộn", value: 15, color: "#f59e0b" },
-  ]
+  const [attendanceData, setAttendanceData] = useState<any[]>([])
 
-  const incidentData = [
-    { type: "Tắc đường", count: 12, severity: "low" },
-    { type: "Sự cố kỹ thuật", count: 3, severity: "high" },
-    { type: "Học sinh vắng mặt", count: 25, severity: "medium" },
-    { type: "Thời tiết xấu", count: 5, severity: "medium" },
-    { type: "Khác", count: 8, severity: "low" },
-  ]
+  const [incidentData, setIncidentData] = useState<any[]>([])
 
-  const driverPerformanceData = [
-    { name: "Trần Văn Hùng", trips: 48, onTimeRate: 95, rating: 4.8 },
-    { name: "Nguyễn Văn Nam", trips: 45, onTimeRate: 93, rating: 4.7 },
-    { name: "Lê Văn Tùng", trips: 42, onTimeRate: 90, rating: 4.5 },
-    { name: "Phạm Văn Đức", trips: 40, onTimeRate: 88, rating: 4.3 },
-    { name: "Hoàng Văn Minh", trips: 38, onTimeRate: 85, rating: 4.2 },
-  ]
+  const [driverPerformanceData, setDriverPerformanceData] = useState<any[]>([])
+
+  // Load charts real data
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await apiClient.getReportView({ type: 'trips', from, to })
+        const d: any = (res as any)?.data || {}
+        const trend = Array.isArray(d.trend) ? d.trend : []
+        if (mounted) setTripTrendData(trend.map((it: any) => {
+          const rawDate = it.date || it.day || ''
+          let label = rawDate
+          try {
+            if (rawDate) {
+              const dObj = new Date(rawDate + 'T00:00:00')
+              if (!isNaN(dObj.getTime())) {
+                label = dObj.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' })
+              }
+            }
+          } catch {}
+          return {
+            date: rawDate, // full date for tooltip
+            dayLabel: label, // compact label for axis
+            trips: Number(it.total || 0),
+            onTime: Number(it.onTime || 0),
+            late: Number(it.late || 0),
+          }
+        }))
+
+        const buses = Array.isArray(d.busUtilization) ? d.busUtilization : []
+        if (mounted) setBusUtilizationData(buses.map((b: any) => ({
+          name: b.plateNumber || b.bienSoXe || '',
+          trips: Number(b.trips || 0),
+          utilization: Number(b.utilization || 0), // %
+          scheduledTrips: Number(b.scheduledTrips || 0),
+          activeDays: Number(b.activeDays || 0),
+          onTimeRate: Number(b.onTimeRate || 0),
+        })))
+
+        const drivers = Array.isArray(d.driverPerformance) ? d.driverPerformance : []
+        if (mounted) setDriverPerformanceData(drivers.map((dr: any) => ({
+          name: dr.name || dr.hoTen || '',
+          trips: Number(dr.trips || 0),
+          onTimeRate: Number(dr.onTimeRate || 0),
+          rating: Number(dr.rating || 0),
+        })))
+
+        const attendance = d.attendance || {}
+        const total = Number(attendance.total || 0)
+        if (mounted) setAttendanceData([
+          { name: 'Có mặt', value: Number(attendance.present || 0), color: '#10b981' },
+          { name: 'Vắng mặt', value: Number(attendance.absent || 0), color: '#ef4444' },
+          { name: 'Đi muộn', value: Number(attendance.late || 0), color: '#f59e0b' },
+        ])
+
+        const incidents = Array.isArray(d.incidents) ? d.incidents : []
+        if (mounted) setIncidentData(incidents.map((it: any) => ({
+          type: it.type || it.loaiSuCo || '',
+          count: Number(it.count || 0),
+          severity: it.severity || it.mucDo || 'low',
+        })))
+      } catch (e) {
+        console.warn('Failed to load report charts', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [from, to])
 
   const uiStats = stats || {
     totalTrips: 0,
@@ -302,29 +340,67 @@ export default function ReportsPage() {
                 <SelectItem value="custom">Tùy chỉnh</SelectItem>
               </SelectContent>
             </Select>
-            <Button 
-              className="gap-2"
-              onClick={async () => {
-                try {
-                  const blob = await apiClient.exportReport({ format: "xlsx", type: reportType, from, to })
-                  const url = window.URL.createObjectURL(blob)
-                  const a = document.createElement("a")
-                  a.href = url
-                  a.download = `report_${reportType}_${from}_${to}.xlsx`
-                  document.body.appendChild(a)
-                  a.click()
-                  window.URL.revokeObjectURL(url)
-                  document.body.removeChild(a)
-                  toast({ title: "Thành công", description: "Đã xuất báo cáo thành công" })
-                } catch (e) {
-                  toast({ title: "Lỗi", description: "Không thể xuất báo cáo", variant: "destructive" })
-                }
-              }}
-            >
-              <Download className="w-4 h-4" />
-              Xuất báo cáo
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Xuất báo cáo
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-3" align="end">
+                <div className="grid gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="gap-2 justify-start"
+                    onClick={async () => {
+                      try {
+                        const blob = await apiClient.exportReport({ format: "pdf", type: activeTab, from, to })
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement("a")
+                        a.href = url
+                        a.download = `report_${activeTab}_${from}_${to}.pdf`
+                        document.body.appendChild(a)
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                        document.body.removeChild(a)
+                        toast({ title: "Thành công", description: "Đã xuất báo cáo PDF" })
+                      } catch (e) {
+                        toast({ title: "Lỗi", description: "Không thể xuất PDF", variant: "destructive" })
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4 text-primary" />
+                    Xuất PDF
+                  </Button>
+
+                  <Button 
+                    variant="outline" 
+                    className="gap-2 justify-start"
+                    onClick={async () => {
+                      try {
+                        const blob = await apiClient.exportReport({ format: "xlsx", type: activeTab, from, to })
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement("a")
+                        a.href = url
+                        a.download = `report_${activeTab}_${from}_${to}.xlsx`
+                        document.body.appendChild(a)
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                        document.body.removeChild(a)
+                        toast({ title: "Thành công", description: "Đã xuất báo cáo Excel" })
+                      } catch (e) {
+                        toast({ title: "Lỗi", description: "Không thể xuất Excel", variant: "destructive" })
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4 text-green-500" />
+                    Xuất Excel
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
+          {/* Removed quick report-type chooser per request */}
         </div>
 
         {/* Overview Stats */}
@@ -438,7 +514,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Detailed Reports */}
-        <Tabs defaultValue="trips" className="space-y-6" onValueChange={(v) => setActiveTab(v)}>
+        <Tabs value={activeTab} className="space-y-6" onValueChange={(v) => setActiveTab(v)}>
           <TabsList className="grid w-full max-w-3xl grid-cols-5">
             <TabsTrigger value="trips">Chuyến đi</TabsTrigger>
             <TabsTrigger value="buses">Xe buýt</TabsTrigger>
@@ -462,9 +538,17 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={tripTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
+                      <XAxis dataKey="dayLabel" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip
+                        formatter={(value: any, name: string, props: any) => {
+                          return [value, name]
+                        }}
+                        labelFormatter={(label: string) => {
+                          // Tìm đối tượng theo dayLabel để lấy full date
+                          const found = tripTrendData.find(d => d.dayLabel === label)
+                          return found ? `Ngày: ${found.date}` : label
+                        }}
                         contentStyle={{
                           backgroundColor: "hsl(var(--background))",
                           border: "1px solid hsl(var(--border))",
@@ -499,20 +583,20 @@ export default function ReportsPage() {
                     <div className="p-4 rounded-lg bg-muted/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">Chuyến đúng giờ</span>
-                        <span className="text-lg font-bold text-green-500">196</span>
+                        <span className="text-lg font-bold text-green-500">{Math.max(Number((reportData?.trips?.completed ?? 0)) - Number((reportData?.trips?.delayed ?? 0)), 0)}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
-                        <div className="bg-green-500 h-2 rounded-full" style={{ width: "92%" }} />
+                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${uiStats.onTimeRate}%` }} />
                       </div>
                     </div>
 
                     <div className="p-4 rounded-lg bg-muted/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">Chuyến trễ</span>
-                        <span className="text-lg font-bold text-orange-500">17</span>
+                        <span className="text-lg font-bold text-orange-500">{Number(reportData?.trips?.delayed ?? 0)}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
-                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: "8%" }} />
+                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, uiStats.totalTrips ? ((Number(reportData?.trips?.delayed ?? 0) / uiStats.totalTrips) * 100) : 0))}%` }} />
                       </div>
                     </div>
 
@@ -520,11 +604,11 @@ export default function ReportsPage() {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Thời gian TB</p>
-                          <p className="font-semibold text-foreground mt-1">32 phút</p>
+                          <p className="font-semibold text-foreground mt-1">{Number(reportData?.trips?.averageDurationMinutes ?? 0)} phút</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Khoảng cách TB</p>
-                          <p className="font-semibold text-foreground mt-1">12.5 km</p>
+                          <p className="font-semibold text-foreground mt-1">{Number(reportData?.trips?.averageDistanceKm ?? 0)} km</p>
                         </div>
                       </div>
                     </div>
@@ -547,8 +631,17 @@ export default function ReportsPage() {
                     <BarChart data={busUtilizationData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
+                      <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={(v)=> v + '%'} />
                       <Tooltip
+                        formatter={(value: any, name: string, props: any) => {
+                          if (name === 'utilization') return [value + '%', 'Sử dụng'];
+                          return [value, name];
+                        }}
+                        labelFormatter={(label: string) => {
+                          const found = busUtilizationData.find(b => b.name === label)
+                          if (!found) return label
+                          return `${label} | ${found.trips}/${found.scheduledTrips} chuyến thực tế / tối đa | On-time: ${found.onTimeRate}%`
+                        }}
                         contentStyle={{
                           backgroundColor: "hsl(var(--background))",
                           border: "1px solid hsl(var(--border))",
@@ -670,10 +763,7 @@ export default function ReportsPage() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => {
-                          const p = Number(percent ?? 0)
-                          return `${name}: ${(p * 100).toFixed(0)}%`
-                        }}
+                        label={({ name, value }) => `${name}: ${Number(value ?? 0)}`}
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="value"
@@ -707,14 +797,14 @@ export default function ReportsPage() {
                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
                             <span className="text-sm font-medium text-foreground">{item.name}</span>
                           </div>
-                          <span className="text-lg font-bold text-foreground">{item.value}</span>
+                          <span className="text-lg font-bold text-foreground">{Number(item.value ?? 0)}</span>
                         </div>
                         <div className="w-full bg-muted rounded-full h-2">
                           <div
                             className="h-2 rounded-full"
                             style={{
                               backgroundColor: item.color,
-                              width: `${(item.value / 490) * 100}%`,
+                              width: `${(Number(item.value ?? 0) / Math.max(1, Number(uiStats.totalStudents ?? 0))) * 100}%`,
                             }}
                           />
                         </div>
@@ -725,11 +815,17 @@ export default function ReportsPage() {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Tổng học sinh</p>
-                          <p className="font-semibold text-foreground mt-1">490</p>
+                          <p className="font-semibold text-foreground mt-1">{uiStats.totalStudents}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Tỷ lệ có mặt</p>
-                          <p className="font-semibold text-green-500 mt-1">91.8%</p>
+                          <p className="font-semibold text-green-500 mt-1">{
+                            (() => {
+                              const present = Number(attendanceData.find(a => a.name === 'Có mặt')?.value ?? 0)
+                              const total = Math.max(1, Number(uiStats.totalStudents ?? 0))
+                              return `${((present / total) * 100).toFixed(1)}%`
+                            })()
+                          }</p>
                         </div>
                       </div>
                     </div>
@@ -803,87 +899,7 @@ export default function ReportsPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Quick Export Options */}
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              Xuất báo cáo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={async () => {
-                  try {
-                    const blob = await apiClient.exportReport({ format: "pdf", type: "overview", from, to })
-                    const url = window.URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url
-                    a.download = `report_overview_${from}_${to}.pdf`
-                    document.body.appendChild(a)
-                    a.click()
-                    window.URL.revokeObjectURL(url)
-                    document.body.removeChild(a)
-                    toast({ title: "Thành công", description: "Đã xuất báo cáo PDF" })
-                  } catch (e) {
-                    toast({ title: "Lỗi", description: "Không thể xuất PDF", variant: "destructive" })
-                  }
-                }}
-              >
-                <Download className="w-6 h-6 text-primary" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo PDF</p>
-                  <p className="text-xs text-muted-foreground mt-1">Xuất báo cáo tổng quan</p>
-                </div>
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={async () => {
-                  try {
-                    const blob = await apiClient.exportReport({ format: "xlsx", type: "trips", from, to })
-                    const url = window.URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url
-                    a.download = `report_trips_${from}_${to}.xlsx`
-                    document.body.appendChild(a)
-                    a.click()
-                    window.URL.revokeObjectURL(url)
-                    document.body.removeChild(a)
-                    toast({ title: "Thành công", description: "Đã xuất báo cáo Excel" })
-                  } catch (e) {
-                    toast({ title: "Lỗi", description: "Không thể xuất Excel", variant: "destructive" })
-                  }
-                }}
-              >
-                <Download className="w-6 h-6 text-green-500" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo Excel</p>
-                  <p className="text-xs text-muted-foreground mt-1">Xuất dữ liệu chi tiết</p>
-                </div>
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={() => {
-                  // TODO: Mở dialog chọn khoảng thời gian
-                  toast({ title: "Thông báo", description: "Tính năng đang phát triển" })
-                }}
-              >
-                <Calendar className="w-6 h-6 text-orange-500" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo tùy chỉnh</p>
-                  <p className="text-xs text-muted-foreground mt-1">Chọn khoảng thời gian</p>
-                </div>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Quick Export Options removed per request */}
       </div>
     </DashboardLayout>
   )

@@ -63,8 +63,6 @@ export default function ParentNotifications() {
 
     const handler = (e: any) => {
       const payload = e.detail
-      console.log('🔔 [PARENT NOTIF DEBUG] Received notification:', payload);
-      
       const dt = payload.thoiGianGui ? new Date(payload.thoiGianGui) : new Date()
       const t = payload.loaiThongBao === "su_co" ? "warning" : payload.loaiThongBao === "chuyen_di" ? "info" : "info"
       const item = {
@@ -77,7 +75,6 @@ export default function ParentNotifications() {
         read: false,
         icon: iconForType(t),
       }
-      console.log('✅ [PARENT NOTIF DEBUG] Added to list:', item);
       setNotifications((prev) => [item, ...prev])
     }
     window.addEventListener("notificationNew", handler)

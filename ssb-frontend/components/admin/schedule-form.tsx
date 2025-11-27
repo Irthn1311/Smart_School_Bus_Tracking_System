@@ -18,13 +18,6 @@ import { apiClient } from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 
 interface ScheduleFormProps {
   onClose: () => void
@@ -59,8 +52,6 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
       date: string
     }>
   } | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -271,64 +262,11 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
           })
           .finally(() => setLoadingStops(false))
       }
-    } else if (mode === "create" && initialSchedule) {
-      // Pre-fill from copy schedule or wizard mode
-      if (initialSchedule.routeId || initialSchedule.raw?.maTuyen || initialSchedule.maTuyen) {
-        const routeId = String(initialSchedule.routeId || initialSchedule.raw?.maTuyen || initialSchedule.maTuyen || '')
-        setRoute(routeId)
-      }
-      if (initialSchedule.busId || initialSchedule.raw?.maXe) {
-        setBus(String(initialSchedule.busId || initialSchedule.raw?.maXe || ''))
-      }
-      if (initialSchedule.driverId || initialSchedule.raw?.maTaiXe) {
-        setDriver(String(initialSchedule.driverId || initialSchedule.raw?.maTaiXe || ''))
-      }
-      if (initialSchedule.tripType || initialSchedule.raw?.loaiChuyen) {
-        const initialTripType = initialSchedule.tripType || initialSchedule.raw?.loaiChuyen || ''
-        setTripType(initialTripType)
-        if (initialTripType) {
-          setTripTypeAutoFilled(true)
-        }
-      }
-      if (initialSchedule.startTime || initialSchedule.raw?.gioKhoiHanh) {
-        setStartTime(initialSchedule.startTime || initialSchedule.raw?.gioKhoiHanh || '')
-      }
-      // Date will be set to today when copying (not copied from original schedule)
-      // User can choose a different date if needed
-      if (initialSchedule.date) {
-        // Only set date if it's in edit mode (not copy mode)
-        // For copy mode, date should be today (set in handleCopyConfirm)
-        if (mode === "edit") {
-          const [year, month, day] = initialSchedule.date.split('-')
-          setDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)))
-        } else {
-          // Copy mode: set to today
-          setDate(new Date())
-        }
-      } else if (mode === "create" && initialSchedule) {
-        // Copy mode without date: set to today
-        setDate(new Date())
-      }
+    } else if (mode === "create" && initialSchedule?.routeId) {
+      // Pre-fill routeId in wizard mode
+      setRoute(String(initialSchedule.routeId || initialSchedule.maTuyen || ''))
     }
   }, [mode, initialSchedule])
-
-  // Track form changes for cancel confirmation
-  useEffect(() => {
-    if (date || route || bus || driver || tripType || startTime) {
-      setHasChanges(true)
-    } else {
-      setHasChanges(false)
-    }
-  }, [date, route, bus, driver, tripType, startTime])
-
-  // Handle cancel with confirmation
-  const handleCancel = () => {
-    if (hasChanges) {
-      setShowCancelConfirm(true)
-    } else {
-      onClose()
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -462,36 +400,15 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
   }
 
   return (
-    <>
-      {/* Cancel confirmation dialog */}
-      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Xác nhận hủy</DialogTitle>
-            <DialogDescription>
-              Bạn có chắc muốn hủy? Dữ liệu đã nhập sẽ bị mất.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
-              Không
-            </Button>
-            <Button variant="destructive" onClick={onClose}>
-              Có, hủy
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* M1-M3: Conflict Error Banner */}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* M1-M3: Conflict Error Banner */}
       {conflictError && conflictError.conflicts.length > 0 && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Xung đột lịch trình</AlertTitle>
           <AlertDescription className="mt-2">
             <p className="mb-2">{conflictError.message}</p>
-            <ul className="list-disc list-inside space-y-1 text-sm mb-4">
+            <ul className="list-disc list-inside space-y-1 text-sm">
               {conflictError.conflicts.map((conflict, idx) => (
                 <li key={idx}>
                   {conflict.conflictType === 'bus' && (
@@ -506,29 +423,6 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
                 </li>
               ))}
             </ul>
-            
-            {/* Action buttons */}
-            <div className="flex gap-2 mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setConflictError(null);
-                }}
-              >
-                Quay lại chỉnh sửa
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setConflictError(null);
-                  onClose();
-                }}
-              >
-                Hủy tạo lịch trình
-              </Button>
-            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -546,17 +440,7 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0">
-            <Calendar 
-              mode="single" 
-              selected={date} 
-              onSelect={setDate} 
-              initialFocus
-              disabled={(date) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                return date < today;
-              }}
-            />
+            <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
           </PopoverContent>
         </Popover>
       </div>
@@ -716,45 +600,8 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
         </Card>
       )}
 
-      {/* Preview Schedule Section */}
-      {date && route && bus && driver && tripType && startTime && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-sm">Xem trước lịch trình</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ngày chạy:</span>
-              <span className="font-medium">{format(date, "PPP", { locale: vi })}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Giờ khởi hành:</span>
-              <span className="font-medium">{startTime}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tuyến đường:</span>
-              <span className="font-medium">{routes.find(r => String(r.maTuyen || r.id) === route)?.tenTuyen || route}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Xe buýt:</span>
-              <span className="font-medium">{buses.find(b => String(b.maXe || b.id) === bus)?.bienSoXe || bus}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tài xế:</span>
-              <span className="font-medium">{drivers.find(d => String(d.maTaiXe || d.id) === driver)?.hoTen || driver}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Loại chuyến:</span>
-              <Badge variant="outline">
-                {tripType === 'don_sang' ? 'Đón sáng' : 'Trả chiều'}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="outline" onClick={handleCancel} disabled={submitting}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
           Hủy
         </Button>
         <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={submitting}>
@@ -766,6 +613,5 @@ export function ScheduleForm({ onClose, onSaved, mode = "create", initialSchedul
         </Button>
       </div>
     </form>
-    </>
   )
 }

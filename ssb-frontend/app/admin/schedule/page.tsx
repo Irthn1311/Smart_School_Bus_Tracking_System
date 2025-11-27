@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -94,14 +93,6 @@ export default function SchedulePage() {
   // 🔥 Auto-assign improvements: Thêm state cho loại phân công
   const [autoAssignType, setAutoAssignType] = useState<'day' | 'week' | 'month'>('day')
   const [autoAssignStartDate, setAutoAssignStartDate] = useState<Date | undefined>(new Date())
-  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
-  const [selectedScheduleToCopy, setSelectedScheduleToCopy] = useState<Schedule | null>(null)
-  const [showBulkPreview, setShowBulkPreview] = useState(false)
-  const [bulkPreviewData, setBulkPreviewData] = useState<{
-    dates: Date[]
-    totalSchedules: number
-    routes: number
-  } | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -201,40 +192,6 @@ export default function SchedulePage() {
     }
 
     return dates
-  }
-
-  async function handleAutoAssignPreview() {
-    if (!autoAssignStartDate) {
-      toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn ngày bắt đầu",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      // Fetch routes to calculate preview
-      const routesRes = await apiClient.getRoutes({ limit: 100 })
-      const routes = (routesRes as any).data || (routesRes as any).data?.data || []
-      
-      // Calculate preview data
-      const datesToAssign = getDatesToAssign(autoAssignType, autoAssignStartDate)
-      const totalSchedules = datesToAssign.length * routes.length * 2 // mỗi ngày × mỗi route × 2 chuyến
-      
-      setBulkPreviewData({
-        dates: datesToAssign,
-        totalSchedules,
-        routes: routes.length,
-      })
-      setShowBulkPreview(true)
-    } catch (err: any) {
-      toast({
-        title: "Lỗi",
-        description: err?.message || "Không thể tính toán preview",
-        variant: "destructive",
-      })
-    }
   }
 
   async function handleAutoAssign() {
@@ -702,22 +659,24 @@ export default function SchedulePage() {
   }
 
   async function handleDuplicate(schedule: Schedule) {
-    setSelectedScheduleToCopy(schedule)
-    setIsCopyDialogOpen(true)
-  }
-
-  function handleCopyConfirm() {
-    if (selectedScheduleToCopy) {
-      setIsCopyDialogOpen(false)
-      setIsAddDialogOpen(true)
-      // Pass schedule data to form via initialSchedule prop
-      // Reset date to today
-      const today = new Date()
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      
-      setEditingSchedule({
-        ...selectedScheduleToCopy,
-        date: todayStr,
+    try {
+      const payload = {
+        maTuyen: schedule.routeId,
+        maXe: schedule.busId,
+        maTaiXe: schedule.driverId,
+        loaiChuyen: schedule.tripType,
+        gioKhoiHanh: schedule.startTime,
+        ngayChay: schedule.date,
+        dangApDung: true,
+      }
+      await apiClient.createSchedule(payload)
+      toast({ title: "Thành công", description: "Đã sao chép lịch trình" })
+      fetchAllSchedules()
+    } catch (err: any) {
+      toast({
+        title: "Lỗi",
+        description: err?.message || "Không thể sao chép lịch trình",
+        variant: "destructive",
       })
     }
   }
@@ -792,110 +751,10 @@ export default function SchedulePage() {
                 <DialogTitle className="text-xl sm:text-2xl">Tạo lịch trình mới</DialogTitle>
                 <DialogDescription className="text-sm sm:text-base">Phân công xe buýt và tài xế cho tuyến đường</DialogDescription>
               </DialogHeader>
-              <ScheduleForm 
-                onClose={() => {
-                  setIsAddDialogOpen(false)
-                  setEditingSchedule(null)
-                  fetchAllSchedules()
-                }}
-                initialSchedule={editingSchedule}
-              />
-            </DialogContent>
-          </Dialog>
-
-          {/* Copy Schedule Dialog */}
-          <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Sao chép lịch trình</DialogTitle>
-                <DialogDescription>
-                  Chọn lịch trình mẫu để sao chép. Bạn có thể chỉnh sửa ngày và giờ sau đó.
-                </DialogDescription>
-              </DialogHeader>
-              
-              {/* Schedule selection */}
-              <div className="space-y-2">
-                <Label>Lịch trình mẫu</Label>
-                <Select 
-                  value={selectedScheduleToCopy?.id || ""} 
-                  onValueChange={(id) => {
-                    const schedule = allSchedules.find(s => s.id === id)
-                    setSelectedScheduleToCopy(schedule || null)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn lịch trình..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allSchedules.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.route} - {s.date ? new Date(s.date).toLocaleDateString('vi-VN') : ''} {s.startTime} ({s.tripType === 'don_sang' ? 'Đón sáng' : 'Trả chiều'})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setIsCopyDialogOpen(false)}>
-                  Hủy
-                </Button>
-                <Button 
-                  onClick={handleCopyConfirm}
-                  disabled={!selectedScheduleToCopy}
-                >
-                  Tiếp tục
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Bulk Preview Dialog */}
-          <Dialog open={showBulkPreview} onOpenChange={setShowBulkPreview}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Xem trước phân công tự động</DialogTitle>
-                <DialogDescription>
-                  Hệ thống sẽ tạo {bulkPreviewData?.totalSchedules} lịch trình cho {bulkPreviewData?.dates?.length} ngày.
-                </DialogDescription>
-              </DialogHeader>
-              
-              {/* Preview details */}
-              <div className="space-y-2">
-                <p className="text-sm">
-                  <strong>Số ngày:</strong> {bulkPreviewData?.dates?.length}
-                </p>
-                <p className="text-sm">
-                  <strong>Số tuyến:</strong> {bulkPreviewData?.routes}
-                </p>
-                <p className="text-sm">
-                  <strong>Tổng lịch trình:</strong> {bulkPreviewData?.totalSchedules} (mỗi ngày × mỗi tuyến × 2 chuyến)
-                </p>
-                {bulkPreviewData?.dates && bulkPreviewData.dates.length > 0 && (
-                  <div className="mt-3 p-3 bg-muted/50 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      <strong>Ngày bắt đầu:</strong> {format(bulkPreviewData.dates[0], "dd/MM/yyyy", { locale: vi })}
-                    </p>
-                    {bulkPreviewData.dates.length > 1 && (
-                      <p className="text-xs text-muted-foreground">
-                        <strong>Ngày kết thúc:</strong> {format(bulkPreviewData.dates[bulkPreviewData.dates.length - 1], "dd/MM/yyyy", { locale: vi })}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setShowBulkPreview(false)}>
-                  Hủy
-                </Button>
-                <Button onClick={() => {
-                  setShowBulkPreview(false)
-                  handleAutoAssign()
-                }}>
-                  Xác nhận và phân công
-                </Button>
-              </div>
+              <ScheduleForm onClose={() => {
+                setIsAddDialogOpen(false)
+                fetchAllSchedules()
+              }} />
             </DialogContent>
           </Dialog>
         </div>
@@ -1498,7 +1357,7 @@ export default function SchedulePage() {
                         </Button>
                         <Button 
                           className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-                          onClick={handleAutoAssignPreview}
+                          onClick={handleAutoAssign}
                           disabled={autoAssignLoading || !autoAssignStartDate}
                         >
                           {autoAssignLoading ? (

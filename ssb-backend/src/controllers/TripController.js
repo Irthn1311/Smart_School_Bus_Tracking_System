@@ -9,7 +9,7 @@ import HocSinhModel from "../models/HocSinhModel.js";
 import ThongBaoModel from "../models/ThongBaoModel.js"; // M5: Send notifications to parents
 import TripStopStatusModel from "../models/TripStopStatusModel.js"; // Store stop arrival/departure times
 import ScheduleStudentStopModel from "../models/ScheduleStudentStopModel.js"; // Schedule student stop mapping
-import TripService from "../services/TripService"; // kết nối tới service xử lý logic trip
+import TripService from "../services/TripService.js"; // kết nối tới service xử lý logic trip
 import TelemetryService from "../services/telemetryService.js"; // clear cache khi trip ends
 import * as response from "../utils/response.js"; // M4-M6: Response envelope
 
@@ -143,32 +143,22 @@ class TripController {
       const sortDir = sortOrder.toLowerCase() === "asc" ? "ASC" : "DESC";
 
       // 🔥 FIX: Tự động tạo ChuyenDi từ LichTrinh nếu chưa có khi driver xem lịch trình hôm nay
-      console.log('🔍 [TripController.getTrips] Query params:', { ngayChay, maTaiXe, trangThai, page, pageSize });
-      
       if (ngayChay && maTaiXe) {
         try {
-          console.log('🔍 [Auto-create] Checking if need to auto-create trips for driver:', maTaiXe, 'date:', ngayChay);
-          
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const queryDate = new Date(ngayChay);
           queryDate.setHours(0, 0, 0, 0);
           
-          console.log('🔍 [Auto-create] Date comparison - today:', today.toISOString(), 'queryDate:', queryDate.toISOString());
-          
           // Chỉ tự động tạo nếu ngày query là hôm nay hoặc tương lai
           if (queryDate >= today) {
             // Lấy tất cả LichTrinh của driver cho ngày này
             const schedules = await LichTrinhModel.getByDriver(maTaiXe);
-            console.log('🔍 [Auto-create] Found schedules for driver:', schedules.length);
-            
             const schedulesForDate = schedules.filter(s => {
               const scheduleDate = new Date(s.ngayChay);
               scheduleDate.setHours(0, 0, 0, 0);
               return scheduleDate.getTime() === queryDate.getTime() && s.dangApDung;
             });
-            
-            console.log('🔍 [Auto-create] Schedules matching date:', schedulesForDate.length);
             
             // Tạo ChuyenDi cho mỗi LichTrinh chưa có ChuyenDi
             for (const schedule of schedulesForDate) {
@@ -195,8 +185,6 @@ class TripController {
           // Log lỗi nhưng không fail request
           console.error(`⚠️ [Auto-create] Lỗi khi tự động tạo ChuyenDi:`, autoCreateError.message);
         }
-      } else {
-        console.log('⚠️ [Auto-create] Skipping auto-create - missing params:', { hasNgayChay: !!ngayChay, hasMaTaiXe: !!maTaiXe });
       }
 
       // Dùng SQL-level filter
@@ -208,8 +196,6 @@ class TripController {
         maTaiXe,
         search, // Thêm search nếu cần
       };
-      
-      console.log('🔍 [TripController.getTrips] Querying with filters:', filters);
 
       // Use service if available, otherwise fallback to model
       let result;
@@ -289,9 +275,6 @@ class TripController {
         }
       }
 
-      console.log('✅ [TripController.getTrips] Final result - trips count:', result.data.length);
-      console.log('✅ [TripController.getTrips] Trip IDs:', result.data.map(t => t.maChuyen));
-      
       return response.ok(res, result.data, {
         page: pageNum,
         pageSize: limit,
@@ -302,7 +285,7 @@ class TripController {
         q: search || null,
       });
     } catch (error) {
-      console.error("❌ [TripController.getTrips] Error:", error);
+      console.error("Error in TripController.getAll:", error);
       return response.serverError(
         res,
         "Lỗi server khi lấy danh sách chuyến đi",
@@ -677,7 +660,7 @@ class TripController {
         const validStatuses = [
           "chua_khoi_hanh",
           "dang_chay",
-          "hoan_thanh",
+          "da_hoan_thanh",
           "bi_huy",
         ];
         if (!validStatuses.includes(trangThai)) {
@@ -1248,54 +1231,6 @@ class TripController {
               `✅ [M5] Sent trip_started notifications to ${parentIds.length} parents for trip ${id}`
             );
           }
-          
-          // 🔥 NEW: Tạo thông báo cho ADMIN
-          try {
-            const NguoiDungModel = (await import("../models/NguoiDungModel.js")).default;
-            const admins = await NguoiDungModel.getByRole("quan_tri");
-            const adminIds = admins.map((a) => a.maNguoiDung).filter((id) => id);
-            
-            if (adminIds.length > 0) {
-              const schedule = await LichTrinhModel.getById(trip.maLichTrinh);
-              const bus = schedule ? await XeBuytModel.getById(schedule.maXe) : null;
-              const route = schedule ? await TuyenDuongModel.getById(schedule.maTuyen) : null;
-              const driver = schedule ? await TaiXeModel.getById(schedule.maTaiXe) : null;
-              
-              const startTime = new Date(trip.gioBatDauThucTe).toLocaleTimeString('vi-VN', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              });
-              
-              await ThongBaoModel.createMultiple({
-                danhSachNguoiNhan: adminIds,
-                tieuDe: `🚌 Chuyến #${id} bắt đầu`,
-                noiDung: `🚌 CHUYẾN ĐI BẮT ĐẦU\n\n🆔 Mã chuyến: #${id}\n🚗 Xe: ${bus?.bienSoXe || "N/A"}\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n👨‍✈️ Tài xế: ${driver?.hoTen || "N/A"}\n⏰ Khởi hành: ${startTime}`,
-                loaiThongBao: "chuyen_di",
-              });
-              
-              const io = req.app.get("io");
-              if (io) {
-                console.log(`🔔 [NOTIFICATION DEBUG] Emitting trip_started to role-quan_tri`);
-                console.log(`   Room: role-quan_tri`);
-                console.log(`   Admin count: ${adminIds.length}`);
-                console.log(`   Trip: #${id}`);
-                
-                io.to("role-quan_tri").emit("notification:new", {
-                  tieuDe: `🚌 Chuyến #${id} bắt đầu`,
-                  noiDung: `Xe ${bus?.bienSoXe || 'N/A'} - ${route?.tenTuyen || 'N/A'} lúc ${startTime}`,
-                  loaiThongBao: "chuyen_di",
-                  thoiGianTao: new Date().toISOString(),
-                });
-              }
-              
-              console.log(`📬 Sent trip_started notification to ${adminIds.length} admins`);
-            }
-          } catch (adminNotifError) {
-            console.warn(
-              "⚠️  Failed to send admin notification:",
-              adminNotifError.message
-            );
-          }
         }
       } catch (notifError) {
         // Don't fail the whole request if notification fails
@@ -1484,9 +1419,9 @@ class TripController {
                 const route = await TuyenDuongModel.getById(schedule.maTuyen);
                 const bus = await XeBuytModel.getById(busId);
 
-                // 🔥 FIX: Use actual end time (current time) instead of potentially wrong cached value
-                const actualEndTime = updatedTrip.gioKetThucThucTe || new Date();
-                const endTimeFormatted = new Date(actualEndTime).toLocaleTimeString("vi-VN", {
+                const endTimeFormatted = new Date(
+                  updatedTrip.gioKetThucThucTe
+                ).toLocaleTimeString("vi-VN", {
                   hour: "2-digit",
                   minute: "2-digit",
                 });
@@ -1526,9 +1461,9 @@ class TripController {
                   const route = await TuyenDuongModel.getById(schedule.maTuyen);
                   const bus = await XeBuytModel.getById(busId);
                   
-                  // 🔥 FIX: Use actual current end time for accurate notification
-                  const actualEndTime = updatedTrip.gioKetThucThucTe || new Date();
-                  const endTimeFormatted = new Date(actualEndTime).toLocaleTimeString("vi-VN", {
+                  const endTimeFormatted = new Date(
+                    updatedTrip.gioKetThucThucTe
+                  ).toLocaleTimeString("vi-VN", {
                     hour: "2-digit",
                     minute: "2-digit",
                   });
@@ -1808,7 +1743,7 @@ class TripController {
                 danhSachNguoiNhan: parentIds,
                 tieuDe,
                 noiDung,
-                loaiThongBao: "chuyen_di",
+                loaiThongBao: "student_checkout",
               });
 
               // Emit WebSocket events
@@ -1819,7 +1754,7 @@ class TripController {
                     maNguoiNhan: parentId,
                     tieuDe,
                     noiDung,
-                    loaiThongBao: "chuyen_di",
+                    loaiThongBao: "student_checkout",
                     tripId: id,
                     thoiGianGui: new Date(),
                     daDoc: false,
@@ -2412,7 +2347,7 @@ class TripController {
       // M4-M6: Cannot cancel completed trips
       if (
         trip.trangThai === "hoan_thanh" ||
-        trip.trangThai === "hoan_thanh"
+        trip.trangThai === "da_hoan_thanh"
       ) {
         return response.error(
           res,
@@ -2652,35 +2587,27 @@ class TripController {
             const route = await TuyenDuongModel.getById(schedule.maTuyen);
             const bus = await XeBuytModel.getById(schedule.maXe);
 
-            await ThongBaoModel.createMultiple({
-              danhSachNguoiNhan: [student.maPhuHuynh],
-              tieuDe: "✅ Con đã lên xe",
-              noiDung: `✅ ĐÃ ĐÓN\n\n${student.hoTen} đã LÊN XE thành công lúc ${new Date().toLocaleTimeString('vi-VN')}.\n\n🚌 Xe: ${
+            await ThongBaoModel.createMultiple(
+              [student.maPhuHuynh],
+              "Con đã lên xe",
+              `${student.hoTen} đã được đón lên xe buýt ${
                 bus?.bienSoXe || "N/A"
-              }\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}`,
-              loaiThongBao: "chuyen_di"
-            });
+              } tuyến ${route?.tenTuyen || "N/A"}`,
+              "student_checkin"
+            );
 
             // Emit notification:new event to parent
-            const roomName = `user-${student.maPhuHuynh}`;
-            console.log(`🔔 [CHECKIN DEBUG] Emitting student_pickup notification`);
-            console.log(`   Student: ${student.hoTen} (ID: ${studentId})`);
-            console.log(`   Parent ID: ${student.maPhuHuynh}`);
-            console.log(`   Room: ${roomName}`);
-            console.log(`   Trip: #${id}`);
-            console.log(`   Bus: ${bus?.bienSoXe || 'N/A'}`);
-            
-            io.to(roomName).emit("notification:new", {
+            io.to(`user-${student.maPhuHuynh}`).emit("notification:new", {
               tieuDe: "Con đã lên xe",
               noiDung: `${student.hoTen} đã được đón lên xe buýt ${
                 bus?.bienSoXe || "N/A"
               } tuyến ${route?.tenTuyen || "N/A"}`,
-              loaiThongBao: "chuyen_di",
+              loaiThongBao: "student_checkin",
               thoiGianTao: new Date().toISOString(),
             });
 
             console.log(
-              `✅ Sent checkin notification to parent ${student.maPhuHuynh}`
+              `📬 Sent checkin notification to parent ${student.maPhuHuynh}`
             );
           } catch (notifError) {
             console.warn(
@@ -2796,22 +2723,15 @@ class TripController {
             );
 
             // Emit notification:new event to parent
-            const roomName = `user-${student.maPhuHuynh}`;
-            console.log(`🔔 [CHECKOUT DEBUG] Emitting student_checkout notification`);
-            console.log(`   Student: ${student.hoTen} (ID: ${studentId})`);
-            console.log(`   Parent ID: ${student.maPhuHuynh}`);
-            console.log(`   Room: ${roomName}`);
-            console.log(`   Trip: #${id}`);
-            
-            io.to(roomName).emit("notification:new", {
+            io.to(`user-${student.maPhuHuynh}`).emit("notification:new", {
               tieuDe: "Con đã xuống xe",
               noiDung: `${student.hoTen} đã được trả tại điểm dừng an toàn`,
-              loaiThongBao: "chuyen_di",
+              loaiThongBao: "student_checkout",
               thoiGianTao: new Date().toISOString(),
             });
 
             console.log(
-              `✅ Sent checkout notification to parent ${student.maPhuHuynh}`
+              `📬 Sent checkout notification to parent ${student.maPhuHuynh}`
             );
           } catch (notifError) {
             console.warn(
@@ -2919,34 +2839,31 @@ class TripController {
             const route = await TuyenDuongModel.getById(schedule.maTuyen);
             const bus = await XeBuytModel.getById(schedule.maXe);
 
-            await ThongBaoModel.createMultiple({
-              danhSachNguoiNhan: [student.maPhuHuynh],
-              tieuDe: "⚠️ Con vắng mặt",
-              noiDung: `⚠️ VẮNG MẶT\n\n${
+            await ThongBaoModel.createMultiple(
+              [student.maPhuHuynh],
+              "Con vắng mặt",
+              `${
                 student.hoTen
-              } không có mặt tại điểm đón lúc ${new Date().toLocaleTimeString('vi-VN')}.\n\n🚌 Xe: ${
-                bus?.bienSoXe || "N/A"
-              }\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n\n📞 Vui lòng liên hệ nhà trường nếu có thắc mắc.`,
-              loaiThongBao: "chuyen_di"
-            });
+              } không có mặt tại điểm đón trên chuyến đi tuyến ${
+                route?.tenTuyen || "N/A"
+              } (${bus?.bienSoXe || "N/A"})`,
+              "student_absent"
+            );
 
             // Emit notification:new event to parent
-            const roomName = `user-${student.maPhuHuynh}`;
-            console.log(`🔔 [ABSENT DEBUG] Emitting student_absent notification`);
-            console.log(`   Student: ${student.hoTen} (ID: ${studentId})`);
-            console.log(`   Parent ID: ${student.maPhuHuynh}`);
-            console.log(`   Room: ${roomName}`);
-            console.log(`   Trip: #${id}`);
-            
             io.to(`user-${student.maPhuHuynh}`).emit("notification:new", {
-              tieuDe: "⚠️ Con vắng mặt",
-              noiDung: `${student.hoTen} không có mặt tại điểm đón.`,
-              loaiThongBao: "chuyen_di",
+              tieuDe: "Con vắng mặt",
+              noiDung: `${
+                student.hoTen
+              } không có mặt tại điểm đón trên chuyến đi tuyến ${
+                route?.tenTuyen || "N/A"
+              } (${bus?.bienSoXe || "N/A"})`,
+              loaiThongBao: "student_absent",
               thoiGianTao: new Date().toISOString(),
             });
 
             console.log(
-              `✅ Sent absent notification to parent ${student.maPhuHuynh}`
+              `📧 Sent absent notification to parent ${student.maPhuHuynh}`
             );
           } catch (notifError) {
             console.warn(
@@ -2973,11 +2890,10 @@ class TripController {
   }
 
   // M5: Báo cáo sự cố (emergency/incident)
-  // 🔥 NEW: Hỗ trợ báo cáo TRONG CHUYẾN và NGOÀI CHUYẾN
   static async reportIncident(req, res) {
     try {
       const { id } = req.params;
-      const { loaiSuCo, moTa, viTri, loaiBaoCao = 'trong_chuyen' } = req.body; // 'trong_chuyen' hoặc 'ngoai_chuyen'
+      const { loaiSuCo, moTa, viTri } = req.body;
       const rawAffected =
         req.body?.hocSinhLienQuan ||
         req.body?.affectedStudents ||
@@ -3099,13 +3015,13 @@ class TripController {
       if (adminIds.length > 0) {
         await ThongBaoModel.createMultiple({
           danhSachNguoiNhan: adminIds,
-          tieuDe: `${reportTypeText} - 🚨 ${loaiSuCo}`,
-          noiDung: `${reportTypeText}\n🚌 Xe: ${
+          tieuDe: `🚨 Sự cố mới: ${loaiSuCo}`,
+          noiDung: `Xe buýt ${
             bus?.bienSoXe || "N/A"
-          }\n🛣️ Tuyến: ${route?.tenTuyen || "N/A"}\n⚠️ Sự cố: ${moTa}\n📍 Vị trí: ${
+          } tuyến ${route?.tenTuyen || "N/A"} gặp sự cố: ${moTa}. Vị trí: ${
             viTri || "Chưa xác định"
-          }${parentNotificationMeta.affectedNamesText}`,
-          loaiThongBao: "su_co",
+          }.${parentNotificationMeta.affectedNamesText}`,
+          loaiThongBao: "trip_incident",
         });
         console.log(`✅ [M5 Report Incident] Sent notifications to ${adminIds.length} admins`);
       }
@@ -3136,7 +3052,7 @@ class TripController {
               danhSachNguoiNhan: parentNotificationMeta.parentIds,
               tieuDe: `⚠️ Sự cố: ${loaiSuCo}`,
               noiDung: parentNotificationMeta.parentMessage,
-              loaiThongBao: "su_co",
+              loaiThongBao: "trip_incident",
             });
 
             // Emit notification:new event to each parent
@@ -3144,7 +3060,7 @@ class TripController {
               io.to(`user-${parentId}`).emit("notification:new", {
                 tieuDe: `⚠️ Sự cố: ${loaiSuCo}`,
                 noiDung: parentNotificationMeta.parentMessage,
-                loaiThongBao: "su_co",
+                loaiThongBao: "trip_incident",
                 thoiGianTao: new Date().toISOString(),
               });
             }

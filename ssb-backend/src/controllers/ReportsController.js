@@ -2,6 +2,7 @@ import Joi from "joi";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import ExcelJS from "exceljs";
 
 const REPORT_TYPES = ["overview", "trips", "buses", "drivers", "students", "incidents"];
@@ -54,7 +55,39 @@ async function buildDataByType(type, dateFrom, dateTo) {
     }
     case "trips": {
       const trips = await ChuyenDiModel.getAll({ from: dateFrom, to: dateTo });
-      return { trips };
+      const trendRaw = await ChuyenDiModel.getDailyTrend(dateFrom, dateTo);
+      const busUtilizationRaw = await ChuyenDiModel.getBusUtilization(dateFrom, dateTo);
+      // Bổ sung các ngày không có dữ liệu để frontend vẽ biểu đồ đều
+      const fillTrend = () => {
+        const map = new Map();
+        trendRaw.forEach(r => map.set(r.date, r));
+        const result = [];
+        let cur = new Date(dateFrom + 'T00:00:00');
+        const end = new Date(dateTo + 'T00:00:00');
+        while (cur.getTime() <= end.getTime()) {
+          const key = cur.toISOString().slice(0,10);
+          const found = map.get(key);
+          if (found) {
+            result.push(found);
+          } else {
+            result.push({ date: key, total: 0, onTime: 0, late: 0 });
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+        return result;
+      };
+      const trend = fillTrend();
+      // Chuẩn hóa busUtilization để FE dùng
+      const busUtilization = busUtilizationRaw.map(b => ({
+        plateNumber: b.bienSoXe,
+        bienSoXe: b.bienSoXe,
+        trips: b.trips,
+        utilization: b.utilizationPercent, // % sử dụng theo số lịch trình * ngày
+        onTimeRate: b.onTimeRate,
+        scheduledTrips: b.theoreticalMax,
+        activeDays: b.activeDays,
+      }));
+      return { trips, trend, busUtilization };
     }
     case "buses": {
       const buses = await XeBuytModel.getAll();
@@ -226,25 +259,44 @@ class ReportsController {
         return res.end(out, "utf8");
       }
 
-      // Xuất PDF (JSON format - cần thư viện pdfkit nếu muốn PDF thực sự)
+      // Xuất PDF (bố cục bảng theo hàng/cột – pdfkit)
       if (format === "pdf") {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${fileName}.pdf"`);
         const doc = new PDFDocument({ margin: 50 });
+        // Pipe ngay từ đầu để đảm bảo stream chính xác
+        doc.pipe(res);
         // Try to register Vietnamese-capable fonts if available
         let hasVNRegular = false;
         let hasVNBold = false;
         try {
-          const fontsDir = path.resolve(path.join(__dirname, "../../assets/fonts"));
-          const fontRegular = path.join(fontsDir, "NotoSans-Regular.ttf");
-          const fontBold = path.join(fontsDir, "NotoSans-Bold.ttf");
-          if (fs.existsSync(fontRegular)) {
-            doc.registerFont("vn-regular", fontRegular);
-            hasVNRegular = true;
-          }
-          if (fs.existsSync(fontBold)) {
-            doc.registerFont("vn-bold", fontBold);
-            hasVNBold = true;
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirnameLocal = path.dirname(__filename);
+          const fontsDir = path.resolve(path.join(__dirnameLocal, "../../assets/fonts"));
+          const candidates = [
+            // Project bundled fonts (recommended)
+            { reg: path.join(fontsDir, "NotoSans-Regular.ttf"), bold: path.join(fontsDir, "NotoSans-Bold.ttf") },
+            // Windows common fonts
+            { reg: "C:/Windows/Fonts/segoeui.ttf", bold: "C:/Windows/Fonts/segoeuib.ttf" },
+            { reg: "C:/Windows/Fonts/arial.ttf", bold: "C:/Windows/Fonts/arialbd.ttf" },
+            { reg: "C:/Windows/Fonts/tahoma.ttf", bold: "C:/Windows/Fonts/tahomabd.ttf" },
+            // Linux common fonts
+            { reg: "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", bold: "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf" },
+            { reg: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", bold: "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" },
+            // macOS common fonts
+            { reg: "/Library/Fonts/Arial.ttf", bold: "/Library/Fonts/Arial Bold.ttf" },
+          ];
+
+          for (const cand of candidates) {
+            if (!hasVNRegular && fs.existsSync(cand.reg)) {
+              doc.registerFont("vn-regular", cand.reg);
+              hasVNRegular = true;
+            }
+            if (!hasVNBold && fs.existsSync(cand.bold)) {
+              doc.registerFont("vn-bold", cand.bold);
+              hasVNBold = true;
+            }
+            if (hasVNRegular && hasVNBold) break;
           }
         } catch {}
         doc.info.Title = `SSB Report - ${type}`;
@@ -255,7 +307,8 @@ class ReportsController {
         doc.moveDown(0.5);
         if (hasVNRegular) doc.font('vn-regular');
         doc.fillColor('#555').fontSize(10).text(`Type: ${String(type || '').toUpperCase()}`, { align: 'center' });
-        doc.fillColor('#555').fontSize(10).text(`Period: ${dateFrom} → ${dateTo}`, { align: 'center' });
+        // Use ASCII dash to avoid glyph issues when custom font missing
+        doc.fillColor('#555').fontSize(10).text(`Period: ${dateFrom} - ${dateTo}`, { align: 'center' });
         doc.moveDown(1);
 
         // Divider
@@ -265,55 +318,138 @@ class ReportsController {
         doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).stroke('#DDD');
         doc.moveDown(1);
 
-        // Content rendering
-        if (type === 'overview') {
-          // Table-like box
-          const rows = [
-            ['Chỉ số', 'Giá trị'],
-            ['Tổng số xe', String(data?.buses?.totalBuses ?? 0)],
-            ['Xe hoạt động', String(data?.buses?.active ?? 0)],
-            ['Tổng chuyến', String(data?.trips?.totalTrips ?? 0)],
-            ['Chuyến hoàn thành', String(data?.trips?.completedTrips ?? 0)],
-            ['Chuyến trễ', String(data?.trips?.delayedTrips ?? 0)],
-          ];
+        // Helper: vẽ bảng theo cột/hàng, hỗ trợ phân trang (row height cố định)
+        const drawTable = (columns, rows, opts = {}) => {
+          const headBg = opts.headBg || '#F5F5F5';
+          const zebraBg = opts.zebraBg || '#FAFAFA';
+          const border = opts.border || '#E5E5E5';
+          const textColor = '#111';
+          const headerFontSize = 12;
+          const cellFontSize = 10.5;
+          const rowHeight = opts.rowHeight || 22;
+          const colWidths = (() => {
+            if (opts.widths && opts.widths.length === columns.length) return opts.widths;
+            // phân bổ đều
+            return columns.map(() => pageWidth / columns.length);
+          })();
 
-          const colWidths = [pageWidth * 0.6, pageWidth * 0.4];
-          const rowHeight = 24;
-          let y = doc.y;
-          rows.forEach((r, idx) => {
-            const isHeader = idx === 0;
-            // Background
-            if (isHeader) {
-              doc.rect(startX, y, pageWidth, rowHeight).fill('#F5F5F5');
-            } else if (idx % 2 === 0) {
-              doc.rect(startX, y, pageWidth, rowHeight).fill('#FAFAFA');
+          // Vẽ hàng header
+          const drawHeader = (y) => {
+            doc.rect(startX, y, pageWidth, rowHeight).fill(headBg);
+            let x = startX;
+            if (hasVNBold) doc.font('vn-bold');
+            doc.fillColor(textColor).fontSize(headerFontSize);
+            columns.forEach((col, idx) => {
+              doc.text(String(col.header || ''), x + 6, y + 6, { width: colWidths[idx] - 12, align: col.align || 'left' });
+              x += colWidths[idx];
+            });
+            doc.strokeColor(border).lineWidth(0.5).rect(startX, y, pageWidth, rowHeight).stroke();
+          };
+
+          const bottomY = doc.page.height - doc.page.margins.bottom;
+          let y = doc.y + 6;
+          drawHeader(y);
+          y += rowHeight;
+
+          rows.forEach((row, rIdx) => {
+            // New page nếu không đủ chỗ
+            if (y + rowHeight > bottomY) {
+              doc.addPage();
+              // divider + header lại
+              const pw = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+              const sx = doc.page.margins.left;
+              const cy = doc.y;
+              doc.moveTo(sx, cy).lineTo(sx + pw, cy).stroke('#DDD');
+              doc.moveDown(0.8);
+              y = doc.y;
+              drawHeader(y);
+              y += rowHeight;
             }
-            // Text
-            if (isHeader && hasVNBold) doc.font('vn-bold');
-            else if (hasVNRegular) doc.font('vn-regular');
-            doc.fillColor('#111').fontSize(isHeader ? 12 : 11);
-            doc.text(r[0], startX + 8, y + 6, { width: colWidths[0] - 16, align: 'left' });
-            doc.text(r[1], startX + colWidths[0] + 8, y + 6, { width: colWidths[1] - 16, align: 'right' });
-            // Borders
-            doc.strokeColor('#E5E5E5').lineWidth(0.5);
-            doc.rect(startX, y, pageWidth, rowHeight).stroke();
+
+            // nền xen kẽ
+            if (rIdx % 2 === 1) {
+              doc.rect(startX, y, pageWidth, rowHeight).fill(zebraBg);
+            }
+
+            if (hasVNRegular) doc.font('vn-regular');
+            doc.fillColor(textColor).fontSize(cellFontSize);
+            let x = startX;
+            columns.forEach((col, idx) => {
+              const value = Array.isArray(row) ? row[idx] : row[col.key];
+              doc.text(String(value ?? ''), x + 6, y + 6, { width: colWidths[idx] - 12, align: col.align || 'left' });
+              x += colWidths[idx];
+            });
+
+            doc.strokeColor(border).lineWidth(0.5).rect(startX, y, pageWidth, rowHeight).stroke();
             y += rowHeight;
-            // Reset fill after rect
+            // reset fill sau khi vẽ
             doc.fillColor('#000');
           });
-          doc.moveDown(2);
-        } else {
-          // Generic list count and sample rows
-          const first = Object.values(data)[0];
-          const list = Array.isArray(first) ? first : [];
-          if (hasVNRegular) doc.font('vn-regular');
-          doc.fillColor('#111').fontSize(12).text(`Records: ${list.length}`);
-          doc.moveDown(0.5);
-          const sample = list.slice(0, 10);
-          sample.forEach((item, i) => {
-            if (hasVNRegular) doc.font('vn-regular');
-            doc.fillColor('#333').fontSize(10).text(`${i + 1}. ${JSON.stringify(item)}`);
-          });
+
+          doc.moveDown(1.2);
+        };
+
+        // Content rendering theo từng type
+        if (type === 'overview') {
+          const columns = [
+            { header: 'Chỉ số', key: 'label' },
+            { header: 'Giá trị', key: 'value', align: 'right' },
+          ];
+          const rows = [
+            { label: 'Thời gian', value: `${dateFrom} → ${dateTo}` },
+            { label: 'Tổng số xe', value: String(data?.buses?.totalBuses ?? 0) },
+            { label: 'Xe hoạt động', value: String(data?.buses?.active ?? 0) },
+            { label: 'Tổng chuyến', value: String(data?.trips?.totalTrips ?? 0) },
+            { label: 'Chuyến hoàn thành', value: String(data?.trips?.completedTrips ?? 0) },
+            { label: 'Chuyến trễ', value: String(data?.trips?.delayedTrips ?? 0) },
+          ];
+          drawTable(columns, rows, { widths: [pageWidth * 0.6, pageWidth * 0.4] });
+        } else if (type === 'trips') {
+          const columns = [
+            { header: 'Mã chuyến', key: 'maChuyen' },
+            { header: 'Ngày chạy', key: 'ngayChay' },
+            { header: 'Tuyến', key: 'tenTuyen' },
+            { header: 'Biển số', key: 'bienSoXe' },
+            { header: 'Tài xế', key: 'tenTaiXe' },
+            { header: 'Trạng thái', key: 'trangThai' },
+          ];
+          drawTable(columns, data?.trips || []);
+        } else if (type === 'buses') {
+          const columns = [
+            { header: 'Mã xe', key: 'maXe' },
+            { header: 'Biển số', key: 'bienSoXe' },
+            { header: 'Dòng xe', key: 'dongXe' },
+            { header: 'Sức chứa', key: 'sucChua', align: 'right' },
+            { header: 'Trạng thái', key: 'trangThai' },
+          ];
+          drawTable(columns, data?.buses || []);
+        } else if (type === 'drivers') {
+          const columns = [
+            { header: 'Mã tài xế', key: 'maTaiXe' },
+            { header: 'Họ tên', key: 'hoTen' },
+            { header: 'Số bằng lái', key: 'soBangLai' },
+            { header: 'SĐT', key: 'soDienThoai' },
+            { header: 'Trạng thái', key: 'trangThai' },
+          ];
+          drawTable(columns, data?.drivers || []);
+        } else if (type === 'students') {
+          const columns = [
+            { header: 'Mã HS', key: 'maHocSinh' },
+            { header: 'Họ tên', key: 'hoTen' },
+            { header: 'Lớp', key: 'lop' },
+            { header: 'Phụ huynh', key: 'tenPhuHuynh' },
+            { header: 'SĐT PH', key: 'sdtPhuHuynh' },
+          ];
+          drawTable(columns, data?.students || []);
+        } else if (type === 'incidents') {
+          const columns = [
+            { header: 'Mã sự cố', key: 'maSuCo' },
+            { header: 'Loại', key: 'loaiSuCo' },
+            { header: 'Mức độ', key: 'mucDo' },
+            { header: 'Mô tả', key: 'moTa' },
+            { header: 'Ngày', key: 'ngayTao' },
+          ];
+          drawTable(columns, data?.incidents || []);
         }
 
         // Footer
@@ -322,7 +458,7 @@ class ReportsController {
         doc.fillColor('#888').fontSize(9).text('Generated by Smart School Bus System', { align: 'right' });
 
         doc.end();
-        return doc.pipe(res);
+        return;
       }
 
       return res.status(400).json({ success: false, message: "Định dạng xuất không hợp lệ" });

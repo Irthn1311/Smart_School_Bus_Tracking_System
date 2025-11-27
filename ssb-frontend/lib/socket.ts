@@ -245,16 +245,10 @@ class SocketService {
 
     // Generic notification event
     this.socket.on("notification:new", (data) => {
-      console.log("🔔 [SOCKET DEBUG] Received notification:new event:", data);
-      console.log("   Type:", data.loaiThongBao);
-      console.log("   Title:", data.tieuDe);
-      console.log("   Content:", data.noiDung);
-      
+      console.log("Notification new:", data);
       window.dispatchEvent(
         new CustomEvent("notificationNew", { detail: data })
       );
-      
-      console.log("✅ [SOCKET DEBUG] Dispatched notificationNew custom event");
     });
 
     // Day 4: stop proximity and delay alerts
@@ -367,25 +361,3 @@ class SocketService {
 // Create singleton instance
 export const socketService = new SocketService();
 export default socketService;
-
-// Export socket instance for direct access (for event listeners)
-export const socket = {
-  on: (event: string, callback: (...args: any[]) => void) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.on(event, callback);
-    }
-  },
-  off: (event: string, callback?: (...args: any[]) => void) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.off(event, callback);
-    }
-  },
-  emit: (event: string, ...args: any[]) => {
-    const socketInstance = socketService.getSocket();
-    if (socketInstance) {
-      socketInstance.emit(event, ...args);
-    }
-  },
-};

@@ -67,15 +67,6 @@ router.get(
   DriverController.getSchedules
 );
 
-// GET /api/v1/drivers/:id/schedules/:scheduleId - Chi tiết lịch trình
-router.get(
-  "/:id/schedules/:scheduleId",
-  AuthMiddleware.authenticate,
-  AuthMiddleware.authorize("quan_tri", "tai_xe"),
-  ValidationMiddleware.validateId,
-  DriverController.getScheduleDetail
-);
-
 // GET /api/v1/drivers/stats - Thống kê tài xế
 router.get(
   "/stats",

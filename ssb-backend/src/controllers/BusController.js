@@ -69,13 +69,23 @@ class BusController {
       const XeBuytModel = (await import("../models/XeBuytModel.js")).default; 
       const busData = await XeBuytModel.getStats();
 
-      // 2. Xử lý số lượng xe theo trạng thái
-      let activeBuses = 0;
+      // 2. Tính "Xe hoạt động" theo chuyến chạy trong ngày hôm nay
+      // Định nghĩa: các xe có chuyến đang chạy hôm nay (chưa hoàn thành)
+      // Trạng thái chuyến ví dụ: 'dang_chay','dang_don','dang_tra' (tùy hệ thống)
+      const { pool } = await import("../db/pool.js");
+      const [activeBusRows] = await pool.query(
+        `SELECT COUNT(DISTINCT lt.maXe) AS active
+         FROM ChuyenDi cd
+         INNER JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh
+         WHERE DATE(cd.ngayChay) = CURDATE()
+           AND cd.trangThai IN ('dang_chay','dang_don','dang_tra')`
+      );
+      const activeBuses = (activeBusRows?.[0]?.active) ?? 0;
+
+      // Vẫn giữ thống kê bảo trì từ bảng XeBuyt để hiển thị phụ
       let maintenanceBuses = 0;
       (busData.busCounts || []).forEach(row => {
-        if (row.trangThai === 'hoat_dong') {
-          activeBuses = row.count;
-        } else if (row.trangThai === 'bao_tri') {
+        if (row.trangThai === 'bao_tri') {
           maintenanceBuses = row.count;
         }
       });
@@ -88,9 +98,9 @@ class BusController {
 
       // 4. Tạo response data khớp với openapi.yaml
       const responseData = {
-        totalBuses: busData.totalBuses || 0,
-        activeBuses: activeBuses,
-        maintenanceBuses: maintenanceBuses,
+        totalBuses: busData.totalBuses || 0, // Tổng số xe hệ thống
+        activeBuses: activeBuses, // Xe đang chạy hôm nay
+        maintenanceBuses: maintenanceBuses, // Xe bảo trì
         averageUtilization: 0, // Tạm thời
         totalTrips: tripStatsOverall.totalTrips || 0, 
         completedTrips: tripStatsOverall.completedTrips || 0, 

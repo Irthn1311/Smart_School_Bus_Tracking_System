@@ -185,10 +185,25 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">Tổng số xe</p>
-                      <p className="text-xs text-muted-foreground">Đang hoạt động</p>
+                      <p className="text-xs text-muted-foreground">Toàn bộ xe trong hệ thống</p>
                     </div>
                   </div>
                   <p className="text-2xl font-bold">{busStats?.totalBuses ?? '-'}</p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
+                      <Bus className="w-5 h-5 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Xe hoạt động</p>
+                      <p className="text-xs text-muted-foreground">
+                        {busStats?.activeBuses ?? 0} xe đang chạy
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold">{busStats?.activeBuses ?? '-'}</p>
                 </div>
 
                 <div className="flex items-center justify-between">

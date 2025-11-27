@@ -662,19 +662,21 @@ class ApiClient {
     hocSinhLienQuan?: number[];
     affectedStudents?: number[];
   }) {
-    // Send to /incidents endpoint with all fields
-    return this.request("/incidents", { 
-      method: "POST", 
-      body: JSON.stringify({
-        maChuyen: payload.maChuyen,
-        loaiSuCo: payload.loaiSuCo || "other",
-        moTa: payload.moTa,
-        mucDo: payload.mucDo,
-        viTri: payload.viTri,
-        trangThai: payload.trangThai,
-        hocSinhLienQuan: payload.hocSinhLienQuan || payload.affectedStudents,
-      })
-    });
+    // 🔥 FIX: Gửi đến endpoint /trips/:id/incident thay vì /incidents nếu có maChuyen
+    if (payload.maChuyen) {
+      return this.request(`/trips/${payload.maChuyen}/incident`, { 
+        method: "POST", 
+        body: JSON.stringify({
+          loaiSuCo: payload.loaiSuCo || "other",
+          moTa: payload.moTa,
+          mucDo: payload.mucDo,
+          viTri: payload.viTri,
+          hocSinhLienQuan: payload.hocSinhLienQuan || payload.affectedStudents,
+        })
+      });
+    }
+    // Fallback: Gửi đến /incidents nếu không có maChuyen
+    return this.request("/incidents", { method: "POST", body: JSON.stringify(payload) });
   }
 
   async updateIncident(id: number, payload: { moTa?: string; mucDo?: string; trangThai?: string }) {
@@ -743,31 +745,6 @@ class ApiClient {
     if (params?.limit) queryParams.append("limit", String(params.limit));
     const q = queryParams.toString();
     return this.request(`/trips/history${q ? `?${q}` : ""}`);
-  }
-
-  // Driver schedules
-  async getDriverSchedules(driverId: string | number, params?: {
-    date?: string;
-    dateRange?: 'today' | 'thisWeek' | 'custom';
-    fromDate?: string;
-    toDate?: string;
-    tripStatus?: 'chua_khoi_hanh' | 'dang_chay' | 'hoan_thanh' | 'huy';
-    status?: string;
-  }) {
-    const queryParams = new URLSearchParams();
-    if (params?.date) queryParams.append("date", params.date);
-    if (params?.dateRange) queryParams.append("dateRange", params.dateRange);
-    if (params?.fromDate) queryParams.append("fromDate", params.fromDate);
-    if (params?.toDate) queryParams.append("toDate", params.toDate);
-    if (params?.tripStatus) queryParams.append("tripStatus", params.tripStatus);
-    if (params?.status) queryParams.append("status", params.status);
-
-    const query = queryParams.toString();
-    return this.request(`/drivers/${driverId}/schedules${query ? `?${query}` : ""}`);
-  }
-
-  async getDriverScheduleDetail(driverId: string | number, scheduleId: string | number) {
-    return this.request(`/drivers/${driverId}/schedules/${scheduleId}`);
   }
 
   // Driver history

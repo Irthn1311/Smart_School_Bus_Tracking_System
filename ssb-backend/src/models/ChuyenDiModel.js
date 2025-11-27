@@ -133,6 +133,118 @@ const ChuyenDiModel = {
     };
   },
 
+  // Xu hướng theo ngày: tổng, đúng giờ, trễ
+  async getDailyTrend(ngayBatDau, ngayKetThuc, filters = {}) {
+    let query = `
+      SELECT 
+        DATE(cd.ngayChay) as date,
+        COUNT(cd.maChuyen) AS total,
+        SUM(CASE 
+          WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe <= lt.gioKhoiHanh THEN 1 ELSE 0 
+        END) AS onTime,
+        SUM(CASE 
+          WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe > lt.gioKhoiHanh THEN 1 ELSE 0 
+        END) AS late
+      FROM ChuyenDi cd
+      JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh
+      WHERE cd.ngayChay BETWEEN ? AND ?
+    `;
+    const params = [ngayBatDau, ngayKetThuc];
+
+    if (filters.maTuyen) {
+      query += " AND lt.maTuyen = ?";
+      params.push(filters.maTuyen);
+    }
+    if (filters.maTaiXe) {
+      query += " AND lt.maTaiXe = ?";
+      params.push(filters.maTaiXe);
+    }
+    if (filters.maXe) {
+      query += " AND lt.maXe = ?";
+      params.push(filters.maXe);
+    }
+
+    query += " GROUP BY DATE(cd.ngayChay) ORDER BY DATE(cd.ngayChay)";
+
+    const [rows] = await pool.query(query, params);
+    return rows.map(r => ({
+      date: r.date,
+      total: Number(r.total || 0),
+      onTime: Number(r.onTime || 0),
+      late: Number(r.late || 0),
+    }));
+  },
+
+  // Sử dụng xe buýt theo khoảng ngày: số chuyến, ngày hoạt động, tỉ lệ on-time
+  async getBusUtilization(ngayBatDau, ngayKetThuc, filters = {}) {
+    const totalDays = (() => {
+      const start = new Date(ngayBatDau + 'T00:00:00');
+      const end = new Date(ngayKetThuc + 'T00:00:00');
+      return Math.max(1, Math.round((end - start) / 86400000) + 1);
+    })();
+
+    // schedules: tổng số lịch trình gán cho xe (giả định mỗi lịch trình có thể chạy mỗi ngày)
+    let query = `
+      SELECT 
+        xb.maXe,
+        xb.bienSoXe,
+        COUNT(DISTINCT cd.maChuyen) AS trips,
+        SUM(CASE WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe <= lt.gioKhoiHanh THEN 1 ELSE 0 END) AS onTimeTrips,
+        SUM(CASE WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe > lt.gioKhoiHanh THEN 1 ELSE 0 END) AS lateTrips,
+        COUNT(DISTINCT DATE(cd.ngayChay)) AS activeDays,
+        (SELECT COUNT(*) FROM LichTrinh lt2 WHERE lt2.maXe = xb.maXe) AS schedules
+      FROM XeBuyt xb
+      LEFT JOIN LichTrinh lt ON lt.maXe = xb.maXe
+      LEFT JOIN ChuyenDi cd ON cd.maLichTrinh = lt.maLichTrinh AND cd.ngayChay BETWEEN ? AND ?
+      WHERE 1=1
+    `;
+    const params = [ngayBatDau, ngayKetThuc];
+
+    if (filters.maTuyen) {
+      query += " AND lt.maTuyen = ?";
+      params.push(filters.maTuyen);
+    }
+    if (filters.maTaiXe) {
+      query += " AND lt.maTaiXe = ?";
+      params.push(filters.maTaiXe);
+    }
+    if (filters.maXe) {
+      query += " AND xb.maXe = ?";
+      params.push(filters.maXe);
+    }
+
+    query += `
+      GROUP BY xb.maXe, xb.bienSoXe
+      ORDER BY trips DESC, xb.bienSoXe
+    `;
+
+    const [rows] = await pool.query(query, params);
+    return rows.map(r => {
+      const trips = Number(r.trips || 0);
+      const activeDays = Number(r.activeDays || 0);
+      const schedules = Number(r.schedules || 0);
+      // utilization theo thực tế: trips / (schedules * totalDays) * 100
+      const theoreticalMax = schedules * totalDays;
+      const utilizationPercent = theoreticalMax > 0 ? Math.round((trips / theoreticalMax) * 100) : 0;
+      const onTimeTrips = Number(r.onTimeTrips || 0);
+      const lateTrips = Number(r.lateTrips || 0);
+      const onTimeRate = (onTimeTrips + lateTrips) > 0 ? Math.round((onTimeTrips / (onTimeTrips + lateTrips)) * 100) : 0;
+      return {
+        maXe: r.maXe,
+        bienSoXe: r.bienSoXe,
+        trips,
+        activeDays,
+        schedules,
+        theoreticalMax,
+        utilizationPercent,
+        utilization: utilizationPercent,
+        onTimeRate,
+        onTimeTrips,
+        lateTrips,
+      };
+    });
+  },
+
   // Lấy chuyến đi theo mã
   async getById(id) {
     const [rows] = await pool.query(
@@ -176,46 +288,6 @@ const ChuyenDiModel = {
        WHERE lt.maTaiXe = ? AND cd.ngayChay = ?
        ORDER BY lt.gioKhoiHanh`,
       [maTaiXe, ngayChay]
-    );
-    return rows;
-  },
-
-  // Lấy chuyến đi theo schedule id và ngày
-  async getByScheduleIdAndDate(maLichTrinh, ngayChay) {
-    const [rows] = await pool.query(
-      `SELECT 
-        cd.*,
-        lt.loaiChuyen,
-        lt.gioKhoiHanh,
-        td.tenTuyen,
-        xb.bienSoXe
-       FROM ChuyenDi cd
-       INNER JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh
-       INNER JOIN TuyenDuong td ON lt.maTuyen = td.maTuyen
-       INNER JOIN XeBuyt xb ON lt.maXe = xb.maXe
-       WHERE cd.maLichTrinh = ? AND cd.ngayChay = ?
-       LIMIT 1`,
-      [maLichTrinh, ngayChay]
-    );
-    return rows[0] || null;
-  },
-
-  // Lấy chuyến đi theo schedule id
-  async getByScheduleId(maLichTrinh) {
-    const [rows] = await pool.query(
-      `SELECT 
-        cd.*,
-        lt.loaiChuyen,
-        lt.gioKhoiHanh,
-        td.tenTuyen,
-        xb.bienSoXe
-       FROM ChuyenDi cd
-       INNER JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh
-       INNER JOIN TuyenDuong td ON lt.maTuyen = td.maTuyen
-       INNER JOIN XeBuyt xb ON lt.maXe = xb.maXe
-       WHERE cd.maLichTrinh = ?
-       ORDER BY cd.ngayChay DESC`,
-      [maLichTrinh]
     );
     return rows;
   },

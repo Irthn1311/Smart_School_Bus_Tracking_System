@@ -375,6 +375,36 @@ class ApiClient {
   async getRouteById(id: string | number, signal?: AbortSignal) {
     return this.request(`/routes/${id}`, { signal });
   }
+
+  // Reports endpoints (real data)
+  async getReportsOverview(params: { from: string; to: string; routeId?: number; driverId?: number; busId?: number }) {
+    const q = new URLSearchParams()
+    q.append('from', params.from)
+    q.append('to', params.to)
+    if (params.routeId) q.append('routeId', String(params.routeId))
+    if (params.driverId) q.append('driverId', String(params.driverId))
+    if (params.busId) q.append('busId', String(params.busId))
+    return this.request(`/reports/overview?${q.toString()}`)
+  }
+
+  async getReportView(params: { type: 'trips'|'buses'|'drivers'|'students'|'incidents'; from: string; to: string }) {
+    const q = new URLSearchParams({ type: params.type, from: params.from, to: params.to }).toString()
+    return this.request(`/reports/view?${q}`)
+  }
+
+  async exportReport(params: { format: 'pdf'|'xlsx'; type: string; from: string; to: string }) {
+    const q = new URLSearchParams({ format: params.format, type: params.type, from: params.from, to: params.to }).toString()
+    const url = `${this.baseURL}/reports/export?${q}`
+    const response = await fetch(url, { headers: this.getAuthHeaders() })
+    if (!response.ok) {
+      const msg = await response.text().catch(() => '')
+      throw { message: msg || 'Export failed', status: response.status }
+    }
+    const blob = await response.blob()
+    // Return in ApiResponse-like shape for compatibility or raw blob?
+    // Frontend expects Blob directly, so return blob.
+    return blob as any
+  }
 }
 
 // Create singleton instance

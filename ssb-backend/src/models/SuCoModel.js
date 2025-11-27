@@ -3,70 +3,21 @@ import pool from "../config/db.js";
 class SuCoModel {
   // Tạo báo cáo sự cố mới
   async create(data) {
-    const { 
-      maChuyen, 
-      moTa, 
-      mucDo = "nhe", 
-      trangThai = "moi",
-      loaiSuCo,
-      viTri,
-      hocSinhLienQuan // array of student IDs
-    } = data;
+    const { maChuyen, moTa, mucDo = "nhe", trangThai = "moi" } = data;
 
-    console.log('🔍 [SuCoModel.create] Creating incident:', { maChuyen, mucDo, loaiSuCo, viTri, hocSinhCount: hocSinhLienQuan?.length });
-
-    // Use current timestamp (MySQL will store in server timezone)
     const [result] = await pool.query(
       `INSERT INTO SuCo (maChuyen, moTa, thoiGianBao, mucDo, trangThai)
-       VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)`,
+       VALUES (?, ?, NOW(), ?, ?)`,
       [maChuyen, moTa, mucDo, trangThai]
     );
 
-    const maSuCo = result.insertId;
-    console.log('✅ [SuCoModel.create] Created incident ID:', maSuCo);
-
-    // TODO: Save loaiSuCo and viTri when columns are added to SuCo table
-    // For now, we can store in moTa or create separate tables
-
-    // Link affected students if any
-    if (hocSinhLienQuan && Array.isArray(hocSinhLienQuan) && hocSinhLienQuan.length > 0) {
-      try {
-        // Create table if not exists
-        await pool.query(`
-          CREATE TABLE IF NOT EXISTS SuCo_HocSinh (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            maSuCo INT NOT NULL,
-            maHocSinh INT NOT NULL,
-            FOREIGN KEY (maSuCo) REFERENCES SuCo(maSuCo) ON DELETE CASCADE,
-            FOREIGN KEY (maHocSinh) REFERENCES HocSinh(maHocSinh) ON DELETE CASCADE,
-            UNIQUE KEY unique_incident_student (maSuCo, maHocSinh)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        `);
-
-        // Insert student links
-        const values = hocSinhLienQuan.map(maHocSinh => [maSuCo, maHocSinh]);
-        if (values.length > 0) {
-          await pool.query(
-            `INSERT IGNORE INTO SuCo_HocSinh (maSuCo, maHocSinh) VALUES ?`,
-            [values]
-          );
-          console.log(`✅ [SuCoModel.create] Linked ${values.length} students to incident ${maSuCo}`);
-        }
-      } catch (linkError) {
-        console.error('⚠️ [SuCoModel.create] Error linking students:', linkError.message);
-      }
-    }
-
     return {
-      maSuCo,
+      maSuCo: result.insertId,
       maChuyen,
       moTa,
       thoiGianBao: new Date(),
       mucDo,
       trangThai,
-      loaiSuCo,
-      viTri,
-      hocSinhLienQuan
     };
   }
 
@@ -127,24 +78,6 @@ class SuCoModel {
 
     const [rows] = await pool.query(query, params);
     return rows;
-  }
-
-  // Lấy học sinh liên quan đến sự cố
-  async getAffectedStudents(maSuCo) {
-    try {
-      const [rows] = await pool.query(
-        `SELECT hs.maHocSinh, hs.hoTen, hs.maPhuHuynh
-         FROM SuCo_HocSinh shs
-         JOIN HocSinh hs ON shs.maHocSinh = hs.maHocSinh
-         WHERE shs.maSuCo = ?`,
-        [maSuCo]
-      );
-      return rows;
-    } catch (err) {
-      // Table might not exist yet
-      console.warn('[SuCoModel.getAffectedStudents] Table not found or error:', err.message);
-      return [];
-    }
   }
 
   // Lấy sự cố theo ID
