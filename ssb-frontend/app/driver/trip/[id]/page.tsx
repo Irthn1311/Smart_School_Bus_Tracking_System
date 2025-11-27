@@ -816,7 +816,7 @@ export default function TripDetailPage() {
           console.warn("[Driver Trip] Failed to set route polyline state", err);
         }
 
-        let mappedStops = routeStops.map((stop: any, index: number) => {
+        const mappedStops = routeStops.map((stop: any, index: number) => {
           // Use stop.sequence if available, otherwise use index + 1
           const stopSequence = stop.sequence || index + 1;
 
@@ -2951,8 +2951,6 @@ export default function TripDetailPage() {
                     {/* Removed route hints to bring students list closer */}
                   </CardContent>
                 </Card>
-
-                {/* (Panel tổng hợp học sinh trên xe đã được gỡ theo yêu cầu) */}
 
                 {/* 🔥 Students List với nút hành động rõ ràng */}
                 <div className="space-y-3">

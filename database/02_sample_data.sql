@@ -87,16 +87,16 @@ SET @phuhuynh_start_1 := LAST_INSERT_ID();
 
 -- Học sinh LẦN 1 (Quận 7)
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Nguyễn Gia Bảo', '2015-06-15', '5A', @phuhuynh_start_1 + 0, '123 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7292386, 106.7098433),
-('Trần Khánh Linh', '2014-11-02', '6B', @phuhuynh_start_1 + 1, '125 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7292386, 106.7098444),
-('Lê Quang Huy', '2013-08-20', '7A', @phuhuynh_start_1 + 2, '456 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.745138, 106.7290962),
-('Phạm Minh Anh', '2015-03-10', '5B', @phuhuynh_start_1 + 3, '789 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7384643, 106.7134656),
-('Ngô Thị Lan', '2014-09-25', '6A', @phuhuynh_start_1 + 4, '321 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7420707, 106.704021),
-('Võ Đức Minh', '2013-12-05', '7B', @phuhuynh_start_1 + 5, '654 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7292472, 106.7101139),
-('Hoàng Thị Hoa', '2015-01-18', '5C', @phuhuynh_start_1 + 6, '987 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7545072, 106.7284512),
-('Lý Văn Đức', '2014-07-30', '6C', @phuhuynh_start_1 + 7, '147 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7485987, 106.7049111),
-('Trần Thị Mai', '2013-04-12', '7C', @phuhuynh_start_1 + 8, '258 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7385119, 106.7150603),
-('Nguyễn Văn Tùng', '2015-10-08', '5D', @phuhuynh_start_1 + 9, '369 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7505247, 106.7051507);
+('Nguyễn Gia Bảo', '2015-06-15', '5A', @phuhuynh_start_1 + 0, '123 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7345, 106.7212),
+('Trần Khánh Linh', '2014-11-02', '6B', @phuhuynh_start_1 + 1, '125 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7346, 106.7213),
+('Lê Quang Huy', '2013-08-20', '7A', @phuhuynh_start_1 + 2, '456 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7400, 106.7150),
+('Phạm Minh Anh', '2015-03-10', '5B', @phuhuynh_start_1 + 3, '789 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7380, 106.7120),
+('Ngô Thị Lan', '2014-09-25', '6A', @phuhuynh_start_1 + 4, '321 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7450, 106.7100),
+('Võ Đức Minh', '2013-12-05', '7B', @phuhuynh_start_1 + 5, '654 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7348, 106.7215),
+('Hoàng Thị Hoa', '2015-01-18', '5C', @phuhuynh_start_1 + 6, '987 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7402, 106.7152),
+('Lý Văn Đức', '2014-07-30', '6C', @phuhuynh_start_1 + 7, '147 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7452, 106.7102),
+('Trần Thị Mai', '2013-04-12', '7C', @phuhuynh_start_1 + 8, '258 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7382, 106.7122),
+('Nguyễn Văn Tùng', '2015-10-08', '5D', @phuhuynh_start_1 + 9, '369 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7454, 106.7104);
 
 -- =================================================================
 -- KHỐI 4: LẦN 2 - HỌC SINH 11-20 (QUẬN 7)
@@ -117,16 +117,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_2 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Đỗ Minh Khang', '2015-02-14', '5A', @phuhuynh_start_2 + 0, '111 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7292384, 106.7098372),
-('Bùi Thảo Vy', '2014-05-22', '6B', @phuhuynh_start_2 + 1, '222 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7550698, 106.7250086),
-('Lương Gia Hân', '2013-09-11', '7A', @phuhuynh_start_2 + 2, '333 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7383393, 106.7147327),
-('Vũ Đức An', '2015-11-30', '5B', @phuhuynh_start_2 + 3, '444 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7371106, 106.7031415),
-('Dương Minh Tuấn', '2014-08-17', '6A', @phuhuynh_start_2 + 4, '555 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7292456, 106.7100635),
-('Trịnh Thị Hương', '2013-03-25', '7B', @phuhuynh_start_2 + 5, '666 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.755069, 106.725013),
-('Hồ Quang Minh', '2015-07-08', '5C', @phuhuynh_start_2 + 6, '777 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7384643, 106.7134656),
-('Mai Văn Đức', '2014-12-19', '6C', @phuhuynh_start_2 + 7, '888 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7152158, 106.7007766),
-('Cao Thị Lan', '2013-01-06', '7C', @phuhuynh_start_2 + 8, '999 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7290965, 106.7035172),
-('Tạ Văn Huy', '2015-04-13', '5D', @phuhuynh_start_2 + 9, '1010 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7543973, 106.7279105);
+('Đỗ Minh Khang', '2015-02-14', '5A', @phuhuynh_start_2 + 0, '111 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7344, 106.7211),
+('Bùi Thảo Vy', '2014-05-22', '6B', @phuhuynh_start_2 + 1, '222 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7401, 106.7151),
+('Lương Gia Hân', '2013-09-11', '7A', @phuhuynh_start_2 + 2, '333 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7381, 106.7121),
+('Vũ Đức An', '2015-11-30', '5B', @phuhuynh_start_2 + 3, '444 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7451, 106.7101),
+('Dương Minh Tuấn', '2014-08-17', '6A', @phuhuynh_start_2 + 4, '555 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7347, 106.7214),
+('Trịnh Thị Hương', '2013-03-25', '7B', @phuhuynh_start_2 + 5, '666 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7403, 106.7153),
+('Hồ Quang Minh', '2015-07-08', '5C', @phuhuynh_start_2 + 6, '777 Nguyễn Thị Thập, Phường Tân Thuận Tây, Quận 7, TP.HCM', 10.7383, 106.7123),
+('Mai Văn Đức', '2014-12-19', '6C', @phuhuynh_start_2 + 7, '888 Lê Văn Việt, Phường Tân Kiểng, Quận 7, TP.HCM', 10.7453, 106.7103),
+('Cao Thị Lan', '2013-01-06', '7C', @phuhuynh_start_2 + 8, '999 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP.HCM', 10.7349, 106.7216),
+('Tạ Văn Huy', '2015-04-13', '5D', @phuhuynh_start_2 + 9, '1010 Huỳnh Tấn Phát, Phường Tân Thuận Đông, Quận 7, TP.HCM', 10.7404, 106.7154);
 
 -- =================================================================
 -- KHỐI 5: LẦN 3 - HỌC SINH 21-30 (QUẬN 4)
@@ -147,16 +147,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_3 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Lưu Gia Bảo', '2015-06-20', '5A', @phuhuynh_start_3 + 0, '45 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7542365, 106.7018965),
-('Đinh Khánh Linh', '2014-10-15', '6B', @phuhuynh_start_3 + 1, '67 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7642, 106.7077048),
-('Phan Quang Huy', '2013-07-22', '7A', @phuhuynh_start_3 + 2, '89 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7626386, 106.7029648),
-('Vương Minh Anh', '2015-03-18', '5B', @phuhuynh_start_3 + 3, '12 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7609368, 106.6977063),
-('Tôn Thị Lan', '2014-09-28', '6A', @phuhuynh_start_3 + 4, '34 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7663515, 106.7065652),
-('Lâm Đức Minh', '2013-11-14', '7B', @phuhuynh_start_3 + 5, '56 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7639198, 106.7040346),
-('Chu Thị Hoa', '2015-01-25', '5C', @phuhuynh_start_3 + 6, '78 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7547923, 106.7021484),
-('Hà Văn Đức', '2014-08-05', '6C', @phuhuynh_start_3 + 7, '90 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7653569, 106.7069399),
-('Quách Thị Mai', '2013-05-12', '7C', @phuhuynh_start_3 + 8, '23 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7592643, 106.7023869),
-('Lý Văn Tùng', '2015-10-30', '5D', @phuhuynh_start_3 + 9, '45 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7542365, 106.7018965);
+('Lưu Gia Bảo', '2015-06-20', '5A', @phuhuynh_start_3 + 0, '45 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7575, 106.7049),
+('Đinh Khánh Linh', '2014-10-15', '6B', @phuhuynh_start_3 + 1, '67 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7500, 106.7080),
+('Phan Quang Huy', '2013-07-22', '7A', @phuhuynh_start_3 + 2, '89 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7520, 106.7050),
+('Vương Minh Anh', '2015-03-18', '5B', @phuhuynh_start_3 + 3, '12 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7576, 106.7050),
+('Tôn Thị Lan', '2014-09-28', '6A', @phuhuynh_start_3 + 4, '34 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7501, 106.7081),
+('Lâm Đức Minh', '2013-11-14', '7B', @phuhuynh_start_3 + 5, '56 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7521, 106.7051),
+('Chu Thị Hoa', '2015-01-25', '5C', @phuhuynh_start_3 + 6, '78 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7577, 106.7051),
+('Hà Văn Đức', '2014-08-05', '6C', @phuhuynh_start_3 + 7, '90 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7502, 106.7082),
+('Quách Thị Mai', '2013-05-12', '7C', @phuhuynh_start_3 + 8, '23 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7522, 106.7052),
+('Lý Văn Tùng', '2015-10-30', '5D', @phuhuynh_start_3 + 9, '45 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7578, 106.7052);
 
 -- =================================================================
 -- KHỐI 6: LẦN 4 - HỌC SINH 31-40 (QUẬN 4 + QUẬN 1)
@@ -177,16 +177,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_4 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Nguyễn Gia Khang', '2015-02-08', '5A', @phuhuynh_start_4 + 0, '112 Cầu Kênh Tẻ, Phường 4, Quận 4, TP.HCM', 10.7536306, 106.7021318),
-('Trần Thảo Vy', '2014-05-19', '6B', @phuhuynh_start_4 + 1, '134 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.757462, 106.7002739),
-('Lê Gia Hân', '2013-09-03', '7A', @phuhuynh_start_4 + 2, '156 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7633951, 106.7077708),
-('Phạm Đức An', '2015-11-24', '5B', @phuhuynh_start_4 + 3, '178 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.762888, 106.702883),
-('Ngô Minh Tuấn', '2014-08-11', '6A', @phuhuynh_start_4 + 4, '190 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.758495, 106.699597),
-('Võ Thị Hương', '2013-03-17', '7B', @phuhuynh_start_4 + 5, '45 Nguyễn Du, Phường Bến Nghé, Quận 1, TP.HCM', 10.780499, 106.7013816),
-('Hoàng Quang Minh', '2015-07-29', '5C', @phuhuynh_start_4 + 6, '67 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM', 10.7734026, 106.7008291),
-('Lý Văn Đức', '2014-12-07', '6C', @phuhuynh_start_4 + 7, '89 Đồng Khởi, Phường Bến Nghé, Quận 1, TP.HCM', 10.7747064, 106.7044077),
-('Đặng Thị Lan', '2013-01-21', '7C', @phuhuynh_start_4 + 8, '101 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM', 10.7735357, 106.7038137),
-('Bùi Văn Huy', '2015-04-16', '5D', @phuhuynh_start_4 + 9, '123 Pasteur, Phường Bến Nghé, Quận 1, TP.HCM', 10.781702, 106.6938115);
+('Nguyễn Gia Khang', '2015-02-08', '5A', @phuhuynh_start_4 + 0, '112 Cầu Kênh Tẻ, Phường 4, Quận 4, TP.HCM', 10.7540, 106.7060),
+('Trần Thảo Vy', '2014-05-19', '6B', @phuhuynh_start_4 + 1, '134 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7579, 106.7053),
+('Lê Gia Hân', '2013-09-03', '7A', @phuhuynh_start_4 + 2, '156 Nguyễn Tất Thành, Phường 2, Quận 4, TP.HCM', 10.7503, 106.7083),
+('Phạm Đức An', '2015-11-24', '5B', @phuhuynh_start_4 + 3, '178 Hoàng Diệu, Phường 3, Quận 4, TP.HCM', 10.7523, 106.7053),
+('Ngô Minh Tuấn', '2014-08-11', '6A', @phuhuynh_start_4 + 4, '190 Khánh Hội, Phường 1, Quận 4, TP.HCM', 10.7580, 106.7054),
+('Võ Thị Hương', '2013-03-17', '7B', @phuhuynh_start_4 + 5, '45 Nguyễn Du, Phường Bến Nghé, Quận 1, TP.HCM', 10.7750, 106.7000),
+('Hoàng Quang Minh', '2015-07-29', '5C', @phuhuynh_start_4 + 6, '67 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM', 10.7755, 106.7005),
+('Lý Văn Đức', '2014-12-07', '6C', @phuhuynh_start_4 + 7, '89 Đồng Khởi, Phường Bến Nghé, Quận 1, TP.HCM', 10.7720, 106.7020),
+('Đặng Thị Lan', '2013-01-21', '7C', @phuhuynh_start_4 + 8, '101 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM', 10.7725, 106.7025),
+('Bùi Văn Huy', '2015-04-16', '5D', @phuhuynh_start_4 + 9, '123 Pasteur, Phường Bến Nghé, Quận 1, TP.HCM', 10.7800, 106.6950);
 
 -- =================================================================
 -- KHỐI 7: LẦN 5 - HỌC SINH 41-50 (QUẬN 1 + QUẬN 2)
@@ -207,16 +207,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_5 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Lương Gia Bảo', '2015-06-12', '5A', @phuhuynh_start_5 + 0, '145 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM', 10.772169, 106.6998725),
-('Đỗ Khánh Linh', '2014-10-28', '6B', @phuhuynh_start_5 + 1, '167 Nguyễn Du, Phường Bến Nghé, Quận 1, TP.HCM', 10.7720732, 106.6926606),
-('Bùi Quang Huy', '2013-07-15', '7A', @phuhuynh_start_5 + 2, '189 Đồng Khởi, Phường Bến Nghé, Quận 1, TP.HCM', 10.7765884, 106.7018913),
-('Vũ Minh Anh', '2015-03-22', '5B', @phuhuynh_start_5 + 3, '201 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM', 10.7761791, 106.7010799),
-('Dương Thị Lan', '2014-09-08', '6A', @phuhuynh_start_5 + 4, '223 Pasteur, Phường Bến Nghé, Quận 1, TP.HCM', 10.7856388, 106.689827),
-('Trịnh Đức Minh', '2013-11-26', '7B', @phuhuynh_start_5 + 5, '245 Nguyễn Thị Minh Khai, Phường Đa Kao, Quận 1, TP.HCM', 10.7901803, 106.7047591),
-('Hồ Thị Hoa', '2015-01-14', '5C', @phuhuynh_start_5 + 6, '12 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.8033661, 106.752398),
-('Mai Văn Đức', '2014-08-31', '6C', @phuhuynh_start_5 + 7, '34 Nguyễn Đức Cảnh, Phường An Phú, Quận 2, TP.HCM', 10.7987164, 106.738542),
-('Cao Thị Mai', '2013-05-19', '7C', @phuhuynh_start_5 + 8, '56 Thảo Điền, Phường Thảo Điền, Quận 2, TP.HCM', 10.8083325, 106.7333191),
-('Tạ Văn Tùng', '2015-10-05', '5D', @phuhuynh_start_5 + 9, '78 Nguyễn Thị Định, Phường Bình An, Quận 2, TP.HCM', 10.7842404, 106.760988);
+('Lương Gia Bảo', '2015-06-12', '5A', @phuhuynh_start_5 + 0, '145 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM', 10.7756, 106.7006),
+('Đỗ Khánh Linh', '2014-10-28', '6B', @phuhuynh_start_5 + 1, '167 Nguyễn Du, Phường Bến Nghé, Quận 1, TP.HCM', 10.7751, 106.7001),
+('Bùi Quang Huy', '2013-07-15', '7A', @phuhuynh_start_5 + 2, '189 Đồng Khởi, Phường Bến Nghé, Quận 1, TP.HCM', 10.7721, 106.7021),
+('Vũ Minh Anh', '2015-03-22', '5B', @phuhuynh_start_5 + 3, '201 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM', 10.7726, 106.7026),
+('Dương Thị Lan', '2014-09-08', '6A', @phuhuynh_start_5 + 4, '223 Pasteur, Phường Bến Nghé, Quận 1, TP.HCM', 10.7801, 106.6951),
+('Trịnh Đức Minh', '2013-11-26', '7B', @phuhuynh_start_5 + 5, '245 Nguyễn Thị Minh Khai, Phường Đa Kao, Quận 1, TP.HCM', 10.7780, 106.6920),
+('Hồ Thị Hoa', '2015-01-14', '5C', @phuhuynh_start_5 + 6, '12 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.7850, 106.7350),
+('Mai Văn Đức', '2014-08-31', '6C', @phuhuynh_start_5 + 7, '34 Nguyễn Đức Cảnh, Phường An Phú, Quận 2, TP.HCM', 10.7855, 106.7355),
+('Cao Thị Mai', '2013-05-19', '7C', @phuhuynh_start_5 + 8, '56 Thảo Điền, Phường Thảo Điền, Quận 2, TP.HCM', 10.8000, 106.7400),
+('Tạ Văn Tùng', '2015-10-05', '5D', @phuhuynh_start_5 + 9, '78 Nguyễn Thị Định, Phường Bình An, Quận 2, TP.HCM', 10.7900, 106.7380);
 
 -- =================================================================
 -- KHỐI 8: LẦN 6 - HỌC SINH 51-60 (QUẬN 2 + QUẬN 3)
@@ -237,16 +237,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_6 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Lưu Gia Khang', '2015-02-18', '5A', @phuhuynh_start_6 + 0, '90 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.7961815, 106.7527792),
-('Đinh Thảo Vy', '2014-05-29', '6B', @phuhuynh_start_6 + 1, '112 Nguyễn Đức Cảnh, Phường An Phú, Quận 2, TP.HCM', 10.7935216, 106.7308195),
-('Phan Gia Hân', '2013-09-14', '7A', @phuhuynh_start_6 + 2, '134 Thảo Điền, Phường Thảo Điền, Quận 2, TP.HCM', 10.8087161, 106.7327733),
-('Vương Đức An', '2015-11-07', '5B', @phuhuynh_start_6 + 3, '156 Nguyễn Thị Định, Phường Bình An, Quận 2, TP.HCM', 10.7878822, 106.7553505),
-('Tôn Minh Tuấn', '2014-08-23', '6A', @phuhuynh_start_6 + 4, '178 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.8076091, 106.7560988),
-('Lâm Thị Hương', '2013-03-31', '7B', @phuhuynh_start_6 + 5, '45 Võ Văn Tần, Phường 6, Quận 3, TP.HCM', 10.7777802, 106.6915841),
-('Chu Quang Minh', '2015-07-12', '5C', @phuhuynh_start_6 + 6, '67 Lý Chính Thắng, Phường 8, Quận 3, TP.HCM', 10.7787259, 106.6816889),
-('Hà Văn Đức', '2014-12-28', '6C', @phuhuynh_start_6 + 7, '89 Nguyễn Đình Chiểu, Phường 6, Quận 3, TP.HCM', 10.7797103, 106.6915166),
-('Quách Thị Lan', '2013-01-09', '7C', @phuhuynh_start_6 + 8, '101 Lê Văn Sỹ, Phường 13, Quận 3, TP.HCM', 10.7875, 106.6738437),
-('Lý Văn Huy', '2015-04-25', '5D', @phuhuynh_start_6 + 9, '123 Cách Mạng Tháng 8, Phường 10, Quận 3, TP.HCM', 10.7798144, 106.6800732);
+('Lưu Gia Khang', '2015-02-18', '5A', @phuhuynh_start_6 + 0, '90 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.7851, 106.7351),
+('Đinh Thảo Vy', '2014-05-29', '6B', @phuhuynh_start_6 + 1, '112 Nguyễn Đức Cảnh, Phường An Phú, Quận 2, TP.HCM', 10.7856, 106.7356),
+('Phan Gia Hân', '2013-09-14', '7A', @phuhuynh_start_6 + 2, '134 Thảo Điền, Phường Thảo Điền, Quận 2, TP.HCM', 10.8001, 106.7401),
+('Vương Đức An', '2015-11-07', '5B', @phuhuynh_start_6 + 3, '156 Nguyễn Thị Định, Phường Bình An, Quận 2, TP.HCM', 10.7901, 106.7381),
+('Tôn Minh Tuấn', '2014-08-23', '6A', @phuhuynh_start_6 + 4, '178 Mai Chí Thọ, Phường An Phú, Quận 2, TP.HCM', 10.7852, 106.7352),
+('Lâm Thị Hương', '2013-03-31', '7B', @phuhuynh_start_6 + 5, '45 Võ Văn Tần, Phường 6, Quận 3, TP.HCM', 10.7900, 106.6900),
+('Chu Quang Minh', '2015-07-12', '5C', @phuhuynh_start_6 + 6, '67 Lý Chính Thắng, Phường 8, Quận 3, TP.HCM', 10.7920, 106.6920),
+('Hà Văn Đức', '2014-12-28', '6C', @phuhuynh_start_6 + 7, '89 Nguyễn Đình Chiểu, Phường 6, Quận 3, TP.HCM', 10.7850, 106.6850),
+('Quách Thị Lan', '2013-01-09', '7C', @phuhuynh_start_6 + 8, '101 Lê Văn Sỹ, Phường 13, Quận 3, TP.HCM', 10.7870, 106.6870),
+('Lý Văn Huy', '2015-04-25', '5D', @phuhuynh_start_6 + 9, '123 Cách Mạng Tháng 8, Phường 10, Quận 3, TP.HCM', 10.7880, 106.6880);
 
 -- =================================================================
 -- KHỐI 9: LẦN 7 - HỌC SINH 61-70 (QUẬN 3 + QUẬN 8)
@@ -267,16 +267,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_7 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Nguyễn Gia Bảo', '2015-06-03', '5A', @phuhuynh_start_7 + 0, '145 Võ Văn Tần, Phường 6, Quận 3, TP.HCM', 10.7760587, 106.6900683),
-('Trần Khánh Linh', '2014-10-19', '6B', @phuhuynh_start_7 + 1, '167 Lý Chính Thắng, Phường 8, Quận 3, TP.HCM', 10.7834191, 106.6842741),
-('Lê Quang Huy', '2013-07-26', '7A', @phuhuynh_start_7 + 2, '189 Nguyễn Đình Chiểu, Phường 6, Quận 3, TP.HCM', 10.7745151, 106.6864458),
-('Phạm Minh Anh', '2015-03-13', '5B', @phuhuynh_start_7 + 3, '201 Lê Văn Sỹ, Phường 13, Quận 3, TP.HCM', 10.7861414, 106.680524),
-('Ngô Thị Lan', '2014-09-30', '6A', @phuhuynh_start_7 + 4, '223 Cách Mạng Tháng 8, Phường 10, Quận 3, TP.HCM', 10.7798697, 106.6778773),
-('Võ Đức Minh', '2013-11-17', '7B', @phuhuynh_start_7 + 5, '45 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.749318, 106.6894797),
-('Hoàng Thị Hoa', '2015-01-04', '5C', @phuhuynh_start_7 + 6, '67 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.740405, 106.6690003),
-('Lý Văn Đức', '2014-08-21', '6C', @phuhuynh_start_7 + 7, '89 Tạ Quang Bửu, Phường 5, Quận 8, TP.HCM', 10.7375303, 106.6729944),
-('Trần Thị Mai', '2013-05-08', '7C', @phuhuynh_start_7 + 8, '101 Bùi Minh Trực, Phường 6, Quận 8, TP.HCM', 10.7362793, 106.6533598),
-('Nguyễn Văn Tùng', '2015-10-15', '5D', @phuhuynh_start_7 + 9, '123 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.7480284, 106.6888627);
+('Nguyễn Gia Bảo', '2015-06-03', '5A', @phuhuynh_start_7 + 0, '145 Võ Văn Tần, Phường 6, Quận 3, TP.HCM', 10.7901, 106.6901),
+('Trần Khánh Linh', '2014-10-19', '6B', @phuhuynh_start_7 + 1, '167 Lý Chính Thắng, Phường 8, Quận 3, TP.HCM', 10.7921, 106.6921),
+('Lê Quang Huy', '2013-07-26', '7A', @phuhuynh_start_7 + 2, '189 Nguyễn Đình Chiểu, Phường 6, Quận 3, TP.HCM', 10.7851, 106.6851),
+('Phạm Minh Anh', '2015-03-13', '5B', @phuhuynh_start_7 + 3, '201 Lê Văn Sỹ, Phường 13, Quận 3, TP.HCM', 10.7871, 106.6871),
+('Ngô Thị Lan', '2014-09-30', '6A', @phuhuynh_start_7 + 4, '223 Cách Mạng Tháng 8, Phường 10, Quận 3, TP.HCM', 10.7881, 106.6881),
+('Võ Đức Minh', '2013-11-17', '7B', @phuhuynh_start_7 + 5, '45 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.7400, 106.6600),
+('Hoàng Thị Hoa', '2015-01-04', '5C', @phuhuynh_start_7 + 6, '67 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.7420, 106.6620),
+('Lý Văn Đức', '2014-08-21', '6C', @phuhuynh_start_7 + 7, '89 Tạ Quang Bửu, Phường 5, Quận 8, TP.HCM', 10.7350, 106.6550),
+('Trần Thị Mai', '2013-05-08', '7C', @phuhuynh_start_7 + 8, '101 Bùi Minh Trực, Phường 6, Quận 8, TP.HCM', 10.7370, 106.6570),
+('Nguyễn Văn Tùng', '2015-10-15', '5D', @phuhuynh_start_7 + 9, '123 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.7401, 106.6601);
 
 -- =================================================================
 -- KHỐI 10: LẦN 8 - HỌC SINH 71-80 (QUẬN 8 + QUẬN 10)
@@ -297,16 +297,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_8 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Lương Gia Khang', '2015-02-11', '5A', @phuhuynh_start_8 + 0, '145 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.742374, 106.6690492),
-('Đỗ Thảo Vy', '2014-05-26', '6B', @phuhuynh_start_8 + 1, '167 Tạ Quang Bửu, Phường 5, Quận 8, TP.HCM', 10.7343374, 106.6629087),
-('Bùi Gia Hân', '2013-09-07', '7A', @phuhuynh_start_8 + 2, '189 Bùi Minh Trực, Phường 6, Quận 8, TP.HCM', 10.7354622, 106.6512707),
-('Vũ Đức An', '2015-11-20', '5B', @phuhuynh_start_8 + 3, '201 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.7469159, 106.6895967),
-('Dương Minh Tuấn', '2014-08-04', '6A', @phuhuynh_start_8 + 4, '223 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.7363745, 106.6716351),
-('Trịnh Thị Hương', '2013-03-12', '7B', @phuhuynh_start_8 + 5, '45 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7667371, 106.6767133),
-('Hồ Quang Minh', '2015-07-24', '5C', @phuhuynh_start_8 + 6, '67 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.770232, 106.6607615),
-('Mai Văn Đức', '2014-12-10', '6C', @phuhuynh_start_8 + 7, '89 Nguyễn Tri Phương, Phường 5, Quận 10, TP.HCM', 10.7664396, 106.6675825),
-('Cao Thị Lan', '2013-01-23', '7C', @phuhuynh_start_8 + 8, '101 Sư Vạn Hạnh, Phường 9, Quận 10, TP.HCM', 10.7628848, 106.6725218),
-('Tạ Văn Huy', '2015-04-09', '5D', @phuhuynh_start_8 + 9, '123 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7675817, 106.6766846);
+('Lương Gia Khang', '2015-02-11', '5A', @phuhuynh_start_8 + 0, '145 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.7421, 106.6621),
+('Đỗ Thảo Vy', '2014-05-26', '6B', @phuhuynh_start_8 + 1, '167 Tạ Quang Bửu, Phường 5, Quận 8, TP.HCM', 10.7351, 106.6551),
+('Bùi Gia Hân', '2013-09-07', '7A', @phuhuynh_start_8 + 2, '189 Bùi Minh Trực, Phường 6, Quận 8, TP.HCM', 10.7371, 106.6571),
+('Vũ Đức An', '2015-11-20', '5B', @phuhuynh_start_8 + 3, '201 Dương Bá Trạc, Phường 1, Quận 8, TP.HCM', 10.7402, 106.6602),
+('Dương Minh Tuấn', '2014-08-04', '6A', @phuhuynh_start_8 + 4, '223 Phạm Hùng, Phường 4, Quận 8, TP.HCM', 10.7422, 106.6622),
+('Trịnh Thị Hương', '2013-03-12', '7B', @phuhuynh_start_8 + 5, '45 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7700, 106.6700),
+('Hồ Quang Minh', '2015-07-24', '5C', @phuhuynh_start_8 + 6, '67 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.7710, 106.6710),
+('Mai Văn Đức', '2014-12-10', '6C', @phuhuynh_start_8 + 7, '89 Nguyễn Tri Phương, Phường 5, Quận 10, TP.HCM', 10.7650, 106.6650),
+('Cao Thị Lan', '2013-01-23', '7C', @phuhuynh_start_8 + 8, '101 Sư Vạn Hạnh, Phường 9, Quận 10, TP.HCM', 10.7660, 106.6660),
+('Tạ Văn Huy', '2015-04-09', '5D', @phuhuynh_start_8 + 9, '123 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7701, 106.6701);
 
 -- =================================================================
 -- KHỐI 11: LẦN 9 - HỌC SINH 81-90 (QUẬN 10 + QUẬN 11)
@@ -327,16 +327,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_9 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Lưu Gia Bảo', '2015-06-18', '5A', @phuhuynh_start_9 + 0, '145 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.770232, 106.6607615),
-('Đinh Khánh Linh', '2014-10-04', '6B', @phuhuynh_start_9 + 1, '167 Nguyễn Tri Phương, Phường 5, Quận 10, TP.HCM', 10.7664503, 106.6675801),
-('Phan Quang Huy', '2013-07-21', '7A', @phuhuynh_start_9 + 2, '189 Sư Vạn Hạnh, Phường 9, Quận 10, TP.HCM', 10.7648024, 106.6721109),
-('Vương Minh Anh', '2015-03-28', '5B', @phuhuynh_start_9 + 3, '201 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7675108, 106.6731175),
-('Tôn Thị Lan', '2014-09-14', '6A', @phuhuynh_start_9 + 4, '223 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.7675955, 106.6670452),
-('Lâm Đức Minh', '2013-11-01', '7B', @phuhuynh_start_9 + 5, '45 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7588122, 106.6405568),
-('Chu Thị Hoa', '2015-01-16', '5C', @phuhuynh_start_9 + 6, '67 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7892812, 106.626626),
-('Hà Văn Đức', '2014-08-02', '6C', @phuhuynh_start_9 + 7, '89 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7593427, 106.641484),
-('Quách Thị Mai', '2013-05-20', '7C', @phuhuynh_start_9 + 8, '101 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7894398, 106.6257932),
-('Lý Văn Tùng', '2015-10-27', '5D', @phuhuynh_start_9 + 9, '123 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7583374, 106.6382668);
+('Lưu Gia Bảo', '2015-06-18', '5A', @phuhuynh_start_9 + 0, '145 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.7711, 106.6711),
+('Đinh Khánh Linh', '2014-10-04', '6B', @phuhuynh_start_9 + 1, '167 Nguyễn Tri Phương, Phường 5, Quận 10, TP.HCM', 10.7651, 106.6651),
+('Phan Quang Huy', '2013-07-21', '7A', @phuhuynh_start_9 + 2, '189 Sư Vạn Hạnh, Phường 9, Quận 10, TP.HCM', 10.7661, 106.6661),
+('Vương Minh Anh', '2015-03-28', '5B', @phuhuynh_start_9 + 3, '201 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM', 10.7702, 106.6702),
+('Tôn Thị Lan', '2014-09-14', '6A', @phuhuynh_start_9 + 4, '223 3 Tháng 2, Phường 12, Quận 10, TP.HCM', 10.7712, 106.6712),
+('Lâm Đức Minh', '2013-11-01', '7B', @phuhuynh_start_9 + 5, '45 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7600, 106.6500),
+('Chu Thị Hoa', '2015-01-16', '5C', @phuhuynh_start_9 + 6, '67 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7620, 106.6520),
+('Hà Văn Đức', '2014-08-02', '6C', @phuhuynh_start_9 + 7, '89 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7601, 106.6501),
+('Quách Thị Mai', '2013-05-20', '7C', @phuhuynh_start_9 + 8, '101 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7621, 106.6521),
+('Lý Văn Tùng', '2015-10-27', '5D', @phuhuynh_start_9 + 9, '123 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7602, 106.6502);
 
 -- =================================================================
 -- KHỐI 12: LẦN 10 - HỌC SINH 91-100 (QUẬN 11 + NHÀ BÈ + BÌNH THẠNH)
@@ -357,16 +357,16 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 SET @phuhuynh_start_10 := LAST_INSERT_ID();
 
 INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VALUES
-('Nguyễn Gia Khang', '2015-02-25', '5A', @phuhuynh_start_10 + 0, '145 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7895996, 106.624318),
-('Trần Thảo Vy', '2014-05-16', '6B', @phuhuynh_start_10 + 1, '167 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7626977, 106.6420024),
-('Lê Gia Hân', '2013-09-28', '7A', @phuhuynh_start_10 + 2, '189 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.789987, 106.621079),
-('Phạm Đức An', '2015-11-13', '5B', @phuhuynh_start_10 + 3, '45 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.7045508, 106.7240446),
-('Ngô Minh Tuấn', '2014-08-27', '6A', @phuhuynh_start_10 + 4, '67 Nguyễn Hữu Thọ, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.665507, 106.7259679),
-('Võ Thị Hương', '2013-03-05', '7B', @phuhuynh_start_10 + 5, '89 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6951459, 106.7043254),
-('Hoàng Quang Minh', '2015-07-19', '5C', @phuhuynh_start_10 + 6, '101 Nguyễn Hữu Thọ, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6688103, 106.7251271),
-('Lý Văn Đức', '2014-12-03', '6C', @phuhuynh_start_10 + 7, '123 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.703064, 106.7041571),
-('Đặng Thị Lan', '2013-01-15', '7C', @phuhuynh_start_10 + 8, '45 Xô Viết Nghệ Tĩnh, Phường 25, Quận Bình Thạnh, TP.HCM', 10.8029237, 106.7124877),
-('Bùi Văn Huy', '2015-04-30', '5D', @phuhuynh_start_10 + 9, '67 Điện Biên Phủ, Phường 25, Quận Bình Thạnh, TP.HCM', 10.8035563, 106.7131672);
+('Nguyễn Gia Khang', '2015-02-25', '5A', @phuhuynh_start_10 + 0, '145 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7622, 106.6522),
+('Trần Thảo Vy', '2014-05-16', '6B', @phuhuynh_start_10 + 1, '167 Lạc Long Quân, Phường 1, Quận 11, TP.HCM', 10.7603, 106.6503),
+('Lê Gia Hân', '2013-09-28', '7A', @phuhuynh_start_10 + 2, '189 Tân Hương, Phường Tân Quy, Quận 11, TP.HCM', 10.7623, 106.6523),
+('Phạm Đức An', '2015-11-13', '5B', @phuhuynh_start_10 + 3, '45 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6972, 106.7041),
+('Ngô Minh Tuấn', '2014-08-27', '6A', @phuhuynh_start_10 + 4, '67 Nguyễn Hữu Thọ, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6950, 106.7020),
+('Võ Thị Hương', '2013-03-05', '7B', @phuhuynh_start_10 + 5, '89 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6973, 106.7042),
+('Hoàng Quang Minh', '2015-07-19', '5C', @phuhuynh_start_10 + 6, '101 Nguyễn Hữu Thọ, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6951, 106.7021),
+('Lý Văn Đức', '2014-12-03', '6C', @phuhuynh_start_10 + 7, '123 Lê Văn Lương, Xã Phú Xuân, Huyện Nhà Bè, TP.HCM', 10.6974, 106.7043),
+('Đặng Thị Lan', '2013-01-15', '7C', @phuhuynh_start_10 + 8, '45 Xô Viết Nghệ Tĩnh, Phường 25, Quận Bình Thạnh, TP.HCM', 10.8100, 106.7100),
+('Bùi Văn Huy', '2015-04-30', '5D', @phuhuynh_start_10 + 9, '67 Điện Biên Phủ, Phường 25, Quận Bình Thạnh, TP.HCM', 10.8105, 106.7105);
 
 -- =================================================================
 -- KHỐI 13: ĐIỂM DỪNG (TRẠM) - Clustering từ địa chỉ học sinh
@@ -376,7 +376,7 @@ INSERT INTO HocSinh (hoTen, ngaySinh, lop, maPhuHuynh, diaChi, viDo, kinhDo) VAL
 
 -- Điểm đến cuối: Đại học Sài Gòn
 INSERT INTO DiemDung (tenDiem, viDo, kinhDo, address, scheduled_time) VALUES
-('Đại học Sài Gòn', 10.7600193, 106.6822534, '273 An Dương Vương, Phường 3, Quận 5, TP.HCM', NULL);
+('Đại học Sài Gòn', 10.7602396, 106.6807235, '273 An Dương Vương, Phường 3, Quận 5, TP.HCM', NULL);
 
 SET @school_stop_id := LAST_INSERT_ID();
 

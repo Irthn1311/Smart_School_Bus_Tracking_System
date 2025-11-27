@@ -97,7 +97,7 @@ export function BusStopOptimizer() {
   const [activeTab, setActiveTab] = useState<"tier1" | "tier2" | "full">("full");
   
   const [params, setParams] = useState<OptimizationParams>({
-    r_walk: 300,
+    r_walk: 500,
     s_max: 25,
     c_bus: 40,
     max_stops: null,
@@ -656,11 +656,10 @@ export function BusStopOptimizer() {
                   type="number"
                   value={params.r_walk}
                   onChange={(e) =>
-                    setParams({ ...params, r_walk: parseInt(e.target.value) || 300 })
+                    setParams({ ...params, r_walk: parseInt(e.target.value) || 500 })
                   }
                   min={100}
                   max={2000}
-                  step={50}
                 />
                 <p className="text-xs text-muted-foreground">{t("optimize.walkingRadiusDesc")}</p>
               </div>

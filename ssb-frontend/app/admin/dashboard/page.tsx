@@ -104,20 +104,17 @@ export default function AdminDashboard() {
         if (driverId) params.driverId = parseInt(driverId)
         if (busId) params.busId = parseInt(busId)
 
-        const [ov, byDay, driver, bus, route] = await Promise.all([
-          apiClient.getStatsOverview(params).catch(() => ({ data: null })),
-          apiClient.getStatsTripsByDay(params).catch(() => ({ data: [] })),
-          apiClient.getStatsDriverPerformance(params).catch(() => ({ data: [] })),
-          apiClient.getStatsBusUtilization(params).catch(() => ({ data: [] })),
-          apiClient.getStatsRoutePunctuality(params).catch(() => ({ data: [] })),
+        const [ov] = await Promise.all([
+          // Use backend reports overview endpoint
+          (apiClient as any).getReportsOverview(params).catch(() => ({ data: null })),
         ])
 
         if (!mounted) return
         setOverview((ov as any)?.data || null)
-        setTripsByDay((byDay as any)?.data || [])
-        setDriverPerformance((driver as any)?.data || [])
-        setBusUtilization((bus as any)?.data || [])
-        setRoutePunctuality((route as any)?.data || [])
+        setTripsByDay([])
+        setDriverPerformance([])
+        setBusUtilization([])
+        setRoutePunctuality([])
       } catch (e: any) {
         console.error(e)
         toast({

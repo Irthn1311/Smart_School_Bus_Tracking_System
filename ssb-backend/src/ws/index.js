@@ -78,16 +78,11 @@ export function initSocketIO(httpServer) {
     const userRoom = `user-${user.userId}`;
     socket.join(userRoom);
     console.log(`  ✅ Joined room: ${userRoom}`);
-    console.log(`  📋 User info: ID=${user.userId}, Email=${user.email}, Role=${user.vaiTro}`);
 
     // M0: Auto join role-based room
     const roleRoom = `role-${user.vaiTro}`;
     socket.join(roleRoom);
     console.log(`  ✅ Joined role room: ${roleRoom}`);
-    
-    // 🔔 DEBUG: List all rooms this socket joined
-    const rooms = Array.from(socket.rooms);
-    console.log(`  📍 All rooms for this socket:`, rooms);
 
     socket.on("ping", () => {
       socket.emit("pong", { timestamp: Date.now() });

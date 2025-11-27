@@ -1,1 +1,0 @@
-Đây là js service (gửi notification, đồng bộ GPS, tạo báo cáo)

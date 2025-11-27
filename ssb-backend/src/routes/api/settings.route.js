@@ -1,5 +1,5 @@
 import express from "express";
-import SettingsController from "../../controllers/SettingsController.js";
+import SettingsController from "../../controllers/SettingsController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 
 const router = express.Router();

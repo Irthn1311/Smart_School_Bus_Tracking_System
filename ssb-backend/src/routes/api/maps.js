@@ -1,5 +1,5 @@
 import express from "express";
-import MapsController from "../../controllers/MapsController.js";
+import MapsController from "../../controllers/MapsController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import {
   distanceMatrixLimiter,
