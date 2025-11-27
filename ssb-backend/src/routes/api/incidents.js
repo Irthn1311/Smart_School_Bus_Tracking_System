@@ -1,5 +1,5 @@
 import express from "express";
-import IncidentController from "../../controllers/IncidentController.ts";
+import IncidentController from "../../controllers/IncidentController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

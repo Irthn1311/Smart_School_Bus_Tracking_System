@@ -1,5 +1,5 @@
 import express from "express";
-import ScheduleController from "../../controllers/ScheduleController.ts";
+import ScheduleController from "../../controllers/ScheduleController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

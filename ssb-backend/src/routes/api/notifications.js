@@ -1,5 +1,5 @@
 import express from "express";
-import NotificationController from "../../controllers/NotificationController.ts";
+import NotificationController from "../../controllers/NotificationController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

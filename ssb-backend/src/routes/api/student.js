@@ -1,5 +1,5 @@
 import express from "express";
-import StudentController from "../../controllers/StudentController.ts";
+import StudentController from "../../controllers/StudentController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

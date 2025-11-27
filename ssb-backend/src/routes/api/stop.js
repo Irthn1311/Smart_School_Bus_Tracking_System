@@ -1,5 +1,5 @@
 import express from "express";
-import StopController from "../../controllers/StopController.ts";
+import StopController from "../../controllers/StopController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 
