@@ -1,0 +1,30 @@
+{
+  "routes": {
+    "QA-ROUTE-1": {
+      "name": "Tuyen QA 1 - Sang",
+      "tripId": 32,
+      "busId": 1,
+      "stops": [
+        { "name": "QA Stop 1.1", "lat": 10.730001, "lng": 106.710001, "etaSec": 60 },
+        { "name": "QA Stop 1.2", "lat": 10.732002, "lng": 106.712002, "etaSec": 180 },
+        { "name": "QA Stop 1.3", "lat": 10.734003, "lng": 106.714003, "etaSec": 300 },
+        { "name": "QA Stop 1.4", "lat": 10.736004, "lng": 106.716004, "etaSec": 420 },
+        { "name": "QA Stop 1.5", "lat": 10.738005, "lng": 106.718005, "etaSec": 540 },
+        { "name": "Đại học Sài Gòn", "lat": 10.760240, "lng": 106.680724, "etaSec": 1800 }
+      ]
+    }
+  },
+  "scenarios": {
+    "delay": {
+      "stopIndex": 2,
+      "delayMinutes": 5
+    },
+    "breakdown": {
+      "stopIndex": 3,
+      "durationMinutes": 3
+    },
+    "skip_stop": {
+      "stopIndex": 4
+    }
+  }
+}

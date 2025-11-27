@@ -1,0 +1,55 @@
+ssb-backend/
+│
+├── src/
+│   ├── config/                       # Cấu hình hệ thống
+│   │   ├── db.js                     # Cấu hình kết nối MySQL
+│   │   ├── firebase.js               # Cấu hình Firebase Realtime DB
+│   │   ├── socket.js                 # Cấu hình WebSocket (Socket.IO)
+│   │   └── env.js                    # Đọc biến môi trường (.env)
+│   │
+│   ├── models/                       # Khai báo các mô hình dữ liệu (ORM / query)
+│   │   ├── Bus.model.js
+│   │   ├── Driver.model.js
+│   │   ├── Student.model.js
+│   │   ├── Parent.model.js
+│   │   ├── Route.model.js
+│   │   ├── Schedule.model.js
+│   │   ├── Trip.model.js
+│   │   └── Notification.model.js
+│   │
+│   ├── controllers/                  # Chứa logic xử lý cho từng entity
+│   │   ├── adminController.js
+│   │   ├── driverController.js
+│   │   ├── parentController.js
+│   │   ├── authController.js
+│   │   └── trackingController.js     # Realtime tracking & incident
+│   │
+│   ├── routes/                       # Định nghĩa các endpoint RESTful
+│   │   ├── adminRoutes.js            # /api/admin/...
+│   │   ├── driverRoutes.js           # /api/driver/...
+│   │   ├── parentRoutes.js           # /api/parent/...
+│   │   ├── authRoutes.js             # /api/auth/login, register
+│   │   └── trackingRoutes.js         # /api/tracking/...
+│   │
+│   ├── middlewares/                  # Middleware xác thực & xử lý lỗi
+│   │   ├── authMiddleware.js         # JWT verify
+│   │   ├── errorHandler.js
+│   │   └── roleMiddleware.js         # Kiểm tra quyền (admin, driver, parent)
+│   │
+│   ├── services/                     # Các service kết nối ngoài hoặc xử lý phức tạp
+│   │   ├── notificationService.js    # Gửi push notification / email
+│   │   ├── trackingService.js        # Đồng bộ GPS với Firebase
+│   │   └── reportService.js          # Tổng hợp báo cáo chuyến
+│   │
+│   ├── utils/                        # Hàm tiện ích dùng chung
+│   │   ├── timeHelper.js
+│   │   ├── jwtHelper.js
+│   │   └── responseHelper.js
+│   │
+│   ├── app.js                        # Khởi tạo Express, middleware, routes
+│   ├── server.js                     # Entry point, khởi động app + socket.io
+│   └── test/                         # (Tuỳ chọn) Unit test
+│
+├── .env                              # Biến môi trường (DB_URI, FIREBASE_KEY, JWT_SECRET, PORT)
+├── package.json
+└── README.md

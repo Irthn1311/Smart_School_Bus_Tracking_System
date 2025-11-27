@@ -1,0 +1,63 @@
+# Bỏ qua các file bí mật
+ssb-backend/.env
+ssb-backend/dist
+ssb-backend/dist/**
+
+# Bỏ qua các thư viện (RẤT QUAN TRỌNG)
+/node_modules
+ssb-backend/node_modules
+ssb-frontend/node_modules
+# dependencies
+/node_modules
+**/node_modules/
+
+# next.js build output
+/.next/
+**/.next/
+out/
+**/out/
+
+# build
+/build
+**/build/
+
+# lock files
+package-lock.json
+**/package-lock.json
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env.*
+**/.env*
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Dependencies
+/node_modules
+/ssb-backend/node_modules
+/ssb-frontend/node_modules
+
+# Environment variables
+.env
+/ssb-backend/.env
+/ssb-frontend/.env
+
+# Build files
+/build
+/dist

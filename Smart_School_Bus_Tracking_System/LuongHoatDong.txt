@@ -1,0 +1,9 @@
+Frontend (React) 
+    ⇅ (HTTP / REST API)
+Backend (Express.js)
+    ⇅
+MySQL (dữ liệu chính)
+    ⇅
+Firebase Realtime DB (dữ liệu GPS real-time)
+    ⇅
+Socket.IO (Realtime communication)
