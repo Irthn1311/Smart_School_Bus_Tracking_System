@@ -1,5 +1,5 @@
 import express from "express";
-import MapsController from "../../controllers/MapsController.js";
+import MapsController from "../../controllers/MapsController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import {
   distanceMatrixLimiter,
@@ -18,7 +18,7 @@ const router = express.Router();
 router.post(
   "/directions",
   AuthMiddleware.authenticate,
-  AuthMiddleware.authorize("quan_tri", "tai_xe"),
+  AuthMiddleware.authorize("quan_tri", "tai_xe", "phu_huynh"),
   directionsLimiter,
   MapsController.getDirections
 );
@@ -60,4 +60,3 @@ router.post(
 );
 
 export default router;
-

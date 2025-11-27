@@ -85,7 +85,7 @@ export function BusStopOptimizer() {
   const [creatingRoutes, setCreatingRoutes] = useState(false);
   
   const [params, setParams] = useState<OptimizationParams>({
-    r_walk: 300,
+    r_walk: 500,
     s_max: 25,
     c_bus: 40,
     max_routes: 4,

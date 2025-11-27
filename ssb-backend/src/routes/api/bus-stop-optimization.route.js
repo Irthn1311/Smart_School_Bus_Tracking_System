@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import BusStopOptimizationController from "../../controllers/BusStopOptimizationController.js";
+import BusStopOptimizationController from "../../controllers/BusStopOptimizationController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 
 const router = express.Router();

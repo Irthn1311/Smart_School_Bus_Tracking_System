@@ -286,21 +286,9 @@ class ValidationMiddleware {
       ngayChay: Joi.string()
         .pattern(/^\d{4}-\d{2}-\d{2}$/)
         .required()
-        .custom((value, helpers) => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const scheduleDate = new Date(value);
-          scheduleDate.setHours(0, 0, 0, 0);
-          
-          if (scheduleDate < today) {
-            return helpers.error('date.past');
-          }
-          return value;
-        })
         .messages({
           "string.pattern.base": "Ngày chạy không hợp lệ (VD: 2025-10-31)",
           "any.required": "Ngày chạy là bắt buộc",
-          "date.past": "Ngày chạy không được là quá khứ",
         }),
       dangApDung: Joi.boolean().optional(),
       students: Joi.array().items(

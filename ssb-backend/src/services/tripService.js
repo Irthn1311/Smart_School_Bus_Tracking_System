@@ -52,8 +52,8 @@ class tripService {
     const t = await ChuyenDiModel.getById(id);
     if (!t) throw new Error("TRIP_NOT_FOUND");
     await ChuyenDiModel.update(id, {
-      trangThai: "dang_chay",
-      gioBatDauThucTe: new Date(),
+      trangThai: "dang_thuc_hien",
+      batDauLuc: new Date(),
     });
     return await ChuyenDiModel.getById(id);
   }
@@ -62,8 +62,8 @@ class tripService {
     const t = await ChuyenDiModel.getById(id);
     if (!t) throw new Error("TRIP_NOT_FOUND");
     await ChuyenDiModel.update(id, {
-      trangThai: "hoan_thanh",
-      gioKetThucThucTe: new Date(),
+      trangThai: "da_hoan_thanh",
+      ketThucLuc: new Date(),
     });
     return await ChuyenDiModel.getById(id);
   }

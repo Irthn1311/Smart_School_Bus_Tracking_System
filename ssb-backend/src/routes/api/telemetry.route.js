@@ -1,5 +1,5 @@
 import express from "express";
-import TelemetryController from "../../controllers/TelemetryController.js";
+import TelemetryController from "../../controllers/TelemetryController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 
 /**

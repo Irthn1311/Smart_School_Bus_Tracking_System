@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   BarChart3,
   TrendingUp,
@@ -20,6 +22,8 @@ import {
   Bus,
   Clock,
   AlertTriangle,
+  FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react"
 import {
   LineChart,
@@ -102,9 +106,9 @@ export default function ReportsPage() {
         const derived = {
           totalTrips,
           onTimeRate,
-          totalStudents: 490, // TODO: replace when BE provides
-          avgDelay: 3.2, // TODO: replace when BE provides
-          incidents: 53, // TODO: replace when BE provides
+          totalStudents: Number(data.students?.total || 0),
+          avgDelay: Number(trips.avgDelayMinutes || data.trips?.avgDelayMinutes || 0),
+          incidents: Number(data.incidents?.total || 0),
           activeBuses,
         }
         if (mounted) setStats(derived)
@@ -127,6 +131,8 @@ export default function ReportsPage() {
       try {
         setTableLoading(true)
         const res = await apiClient.getReportView({ type: reportType, from, to })
+        console.log('📊 Report API Response:', res)
+        console.log('📊 Report Data:', (res as any)?.data)
         if (mounted) setReportData((res as any)?.data || null)
       } catch (e: any) {
         if (mounted) setReportData(null)
@@ -194,11 +200,12 @@ export default function ReportsPage() {
     }
 
     const sliced = rows.slice(0, 10)
+    
     return (
       <Card className="border-border/50">
         <CardHeader>
           <CardTitle>
-            Dữ liệu (top {sliced.length}{rows.length > 10 ? ` / ${rows.length}` : ""})
+            Dữ liệu
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -219,9 +226,42 @@ export default function ReportsPage() {
                 <tbody>
                   {sliced.map((r, idx) => (
                     <tr key={idx} className="border-t border-border/50">
-                      {columns.map((c) => (
-                        <td key={c.key} className="py-2 pr-4 whitespace-nowrap max-w-[260px] truncate" title={String((r as any)[c.key] ?? "")}> {String((r as any)[c.key] ?? "")} </td>
-                      ))}
+                      {columns.map((c) => {
+                        let value = String((r as any)[c.key] ?? "")
+                        
+                        // Format ngày chạy thành DD/MM/YYYY
+                        if (c.key === 'ngayChay' && value) {
+                          try {
+                            const d = new Date(value)
+                            if (!isNaN(d.getTime())) {
+                              const day = String(d.getDate()).padStart(2, '0')
+                              const month = String(d.getMonth() + 1).padStart(2, '0')
+                              const year = d.getFullYear()
+                              value = `${day}/${month}/${year}`
+                            }
+                          } catch (e) {
+                            // Giữ nguyên value nếu parse lỗi
+                          }
+                        }
+                        
+                        // Format trạng thái chuyến đi
+                        if (c.key === 'trangThai' && type === 'trips') {
+                          const statusMap: Record<string, string> = {
+                            'chua_bat_dau': 'Chưa bắt đầu',
+                            'dang_chay': 'Đang chạy',
+                            'hoan_thanh': 'Hoàn thành',
+                            'huy': 'Hủy',
+                            'tre': 'Trễ',
+                          }
+                          value = statusMap[value] || value
+                        }
+                        
+                        return (
+                          <td key={c.key} className="py-2 pr-4 whitespace-nowrap max-w-[260px] truncate" title={value}>
+                            {value}
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -234,45 +274,125 @@ export default function ReportsPage() {
   }
 
   // Mock data for charts
-  const tripTrendData = [
-    { date: "T2", trips: 45, onTime: 42, late: 3 },
-    { date: "T3", trips: 48, onTime: 45, late: 3 },
-    { date: "T4", trips: 46, onTime: 43, late: 3 },
-    { date: "T5", trips: 50, onTime: 46, late: 4 },
-    { date: "T6", trips: 47, onTime: 45, late: 2 },
-    { date: "T7", trips: 44, onTime: 42, late: 2 },
-    { date: "CN", trips: 0, onTime: 0, late: 0 },
-  ]
+  const [tripTrendData, setTripTrendData] = useState<any[]>([])
 
-  const busUtilizationData = [
-    { name: "29B-12345", trips: 48, utilization: 96 },
-    { name: "29B-12346", trips: 45, utilization: 90 },
-    { name: "29B-12347", trips: 42, utilization: 84 },
-    { name: "29B-12348", trips: 40, utilization: 80 },
-    { name: "29B-12349", trips: 38, utilization: 76 },
-  ]
+  const [busUtilizationData, setBusUtilizationData] = useState<any[]>([])
 
-  const attendanceData = [
-    { name: "Có mặt", value: 450, color: "#10b981" },
-    { name: "Vắng mặt", value: 25, color: "#ef4444" },
-    { name: "Đi muộn", value: 15, color: "#f59e0b" },
-  ]
+  const [attendanceData, setAttendanceData] = useState<any[]>([])
 
-  const incidentData = [
-    { type: "Tắc đường", count: 12, severity: "low" },
-    { type: "Sự cố kỹ thuật", count: 3, severity: "high" },
-    { type: "Học sinh vắng mặt", count: 25, severity: "medium" },
-    { type: "Thời tiết xấu", count: 5, severity: "medium" },
-    { type: "Khác", count: 8, severity: "low" },
-  ]
+  const [incidentData, setIncidentData] = useState<any[]>([])
 
-  const driverPerformanceData = [
-    { name: "Trần Văn Hùng", trips: 48, onTimeRate: 95, rating: 4.8 },
-    { name: "Nguyễn Văn Nam", trips: 45, onTimeRate: 93, rating: 4.7 },
-    { name: "Lê Văn Tùng", trips: 42, onTimeRate: 90, rating: 4.5 },
-    { name: "Phạm Văn Đức", trips: 40, onTimeRate: 88, rating: 4.3 },
-    { name: "Hoàng Văn Minh", trips: 38, onTimeRate: 85, rating: 4.2 },
-  ]
+  const [driverPerformanceData, setDriverPerformanceData] = useState<any[]>([])
+
+  // Load charts real data
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await apiClient.getReportView({ type: 'trips', from, to })
+        const d: any = (res as any)?.data || {}
+        const trend = Array.isArray(d.trend) ? d.trend : []
+        if (mounted) setTripTrendData(trend.map((it: any) => {
+          const rawDate = it.date || it.day || ''
+          let label = rawDate
+          try {
+            if (rawDate) {
+              const dObj = new Date(rawDate + 'T00:00:00')
+              if (!isNaN(dObj.getTime())) {
+                label = dObj.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' })
+              }
+            }
+          } catch {}
+          return {
+            date: rawDate, // full date for tooltip
+            dayLabel: label, // compact label for axis
+            trips: Number(it.total || 0),
+            onTime: Number(it.onTime || 0),
+            late: Number(it.late || 0),
+          }
+        }))
+
+        const buses = Array.isArray(d.busUtilization) ? d.busUtilization : []
+        if (mounted) setBusUtilizationData(buses.map((b: any) => ({
+          name: b.plateNumber || b.bienSoXe || '',
+          trips: Number(b.trips || 0),
+          utilization: Number(b.utilization || 0), // %
+          scheduledTrips: Number(b.scheduledTrips || 0),
+          activeDays: Number(b.activeDays || 0),
+          onTimeRate: Number(b.onTimeRate || 0),
+        })))
+
+        const drivers = Array.isArray(d.driverPerformance) ? d.driverPerformance : []
+        if (mounted) setDriverPerformanceData(drivers.map((dr: any) => ({
+          name: dr.name || dr.hoTen || '',
+          trips: Number(dr.trips || 0),
+          onTimeRate: Number(dr.onTimeRate || 0),
+          rating: Number(dr.rating || 0),
+        })))
+
+        const incidents = Array.isArray(d.incidents) ? d.incidents : []
+        if (mounted) setIncidentData(incidents.map((it: any) => ({
+          type: it.type || it.loaiSuCo || '',
+          count: Number(it.count || 0),
+          severity: it.severity || it.mucDo || 'low',
+        })))
+      } catch (e) {
+        console.warn('Failed to load report charts', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [from, to])
+
+  // Load driver data specifically when on drivers tab
+  useEffect(() => {
+    if (activeTab !== 'drivers') return
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await apiClient.getReportView({ type: 'drivers', from, to })
+        const d: any = (res as any)?.data || {}
+        const drivers = Array.isArray(d.driverPerformance) ? d.driverPerformance : []
+        if (mounted && drivers.length > 0) {
+          setDriverPerformanceData(drivers.map((dr: any) => ({
+            name: dr.name || dr.hoTen || '',
+            trips: Number(dr.trips || 0),
+            onTimeRate: Number(dr.onTimeRate || 0),
+            rating: Number(dr.rating || 0),
+          })))
+        }
+      } catch (e) {
+        console.warn('Failed to load driver performance data', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [activeTab, from, to])
+
+  // Load student attendance data specifically when on students tab
+  useEffect(() => {
+    if (activeTab !== 'students') return
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await apiClient.getReportView({ type: 'students', from, to })
+        const d: any = (res as any)?.data || {}
+        const attendance = d.attendance || {}
+        const students = Array.isArray(d.students) ? d.students : []
+        
+        if (mounted) {
+          setAttendanceData([
+            { name: 'Có mặt', value: Number(attendance.present || 0), color: '#10b981' },
+            { name: 'Vắng mặt', value: Number(attendance.absent || 0), color: '#ef4444' },
+          ])
+          
+          // Cập nhật reportData với danh sách học sinh có mặt
+          setReportData({ students })
+        }
+      } catch (e) {
+        console.warn('Failed to load student attendance data', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [activeTab, from, to])
 
   const uiStats = stats || {
     totalTrips: 0,
@@ -304,149 +424,86 @@ export default function ReportsPage() {
                 <SelectItem value="custom">Custom</SelectItem>
               </SelectContent>
             </Select>
-            <Button 
-              className="gap-2"
-              onClick={async () => {
-                try {
-                  const blob = await apiClient.exportReport({ format: "xlsx", type: reportType, from, to })
-                  const url = window.URL.createObjectURL(blob)
-                  const a = document.createElement("a")
-                  a.href = url
-                  a.download = `report_${reportType}_${from}_${to}.xlsx`
-                  document.body.appendChild(a)
-                  a.click()
-                  window.URL.revokeObjectURL(url)
-                  document.body.removeChild(a)
-                  toast({ title: t("common.success"), description: t("reports.exportReport") })
-                } catch (e) {
-                  toast({ title: t("common.error"), description: t("reports.exportReport"), variant: "destructive" })
-                }
-              }}
-            >
-              <Download className="w-4 h-4" />
-              {t("reports.exportReport")}
-            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="gap-2">
+                  <Download className="w-4 h-4" />
+                  {t("reports.exportReport")}
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const blob = await apiClient.exportReport({ format: "xlsx", type: reportType, from, to })
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `report_${reportType}_${from}_${to}.xlsx`
+                      document.body.appendChild(a)
+                      a.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(a)
+                      toast({ title: t("common.success"), description: "Đã xuất báo cáo Excel" })
+                    } catch (e) {
+                      toast({ title: t("common.error"), description: "Không thể xuất báo cáo", variant: "destructive" })
+                    }
+                  }}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Xuất Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const blob = await apiClient.exportReport({ format: "pdf", type: reportType, from, to })
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `report_${reportType}_${from}_${to}.pdf`
+                      document.body.appendChild(a)
+                      a.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(a)
+                      toast({ title: t("common.success"), description: "Đã xuất báo cáo PDF" })
+                    } catch (e) {
+                      toast({ title: t("common.error"), description: "Không thể xuất báo cáo", variant: "destructive" })
+                    }
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Xuất PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.totalTrips")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.totalTrips}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+12%</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Bus className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.onTimeRate")}</p>
-                  <p className="text-2xl font-bold text-green-500 mt-1">{uiStats.onTimeRate}%</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+3%</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.students")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.totalStudents}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+5</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.avgDelay")}</p>
-                  <p className="text-2xl font-bold text-orange-500 mt-1">{uiStats.avgDelay}m</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingDown className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">-0.5m</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-orange-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.incidents")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.incidents}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingDown className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">-8</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Xe hoạt động</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.activeBuses}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-xs text-muted-foreground">Tổng: 5</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Bus className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Detailed Reports */}
-        <Tabs defaultValue="trips" className="space-y-6" onValueChange={(v) => setActiveTab(v)}>
-          <TabsList className="grid w-full max-w-3xl grid-cols-5">
-            <TabsTrigger value="trips">Chuyến đi</TabsTrigger>
-            <TabsTrigger value="buses">Xe buýt</TabsTrigger>
-            <TabsTrigger value="drivers">Tài xế</TabsTrigger>
-            <TabsTrigger value="students">Học sinh</TabsTrigger>
-            <TabsTrigger value="incidents">Sự cố</TabsTrigger>
+        <Tabs value={activeTab} className="space-y-6" onValueChange={(v) => setActiveTab(v)}>
+          <TabsList className="grid w-full max-w-3xl grid-cols-5 p-1 bg-muted/50 shadow-md">
+            <TabsTrigger value="trips" className="gap-2">
+              <Bus className="w-4 h-4" />
+              Chuyến đi
+            </TabsTrigger>
+            <TabsTrigger value="buses" className="gap-2">
+              <Bus className="w-4 h-4" />
+              Xe buýt
+            </TabsTrigger>
+            <TabsTrigger value="drivers" className="gap-2">
+              <Users className="w-4 h-4" />
+              Tài xế
+            </TabsTrigger>
+            <TabsTrigger value="students" className="gap-2">
+              <Users className="w-4 h-4" />
+              Học sinh
+            </TabsTrigger>
+            <TabsTrigger value="incidents" className="gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Sự cố
+            </TabsTrigger>
           </TabsList>
 
           {/* Trips Report */}
@@ -464,9 +521,17 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={tripTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
+                      <XAxis dataKey="dayLabel" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip
+                        formatter={(value: any, name: string, props: any) => {
+                          return [value, name]
+                        }}
+                        labelFormatter={(label: string) => {
+                          // Tìm đối tượng theo dayLabel để lấy full date
+                          const found = tripTrendData.find(d => d.dayLabel === label)
+                          return found ? `Ngày: ${found.date}` : label
+                        }}
                         contentStyle={{
                           backgroundColor: "hsl(var(--background))",
                           border: "1px solid hsl(var(--border))",
@@ -501,20 +566,20 @@ export default function ReportsPage() {
                     <div className="p-4 rounded-lg bg-muted/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">Chuyến đúng giờ</span>
-                        <span className="text-lg font-bold text-green-500">196</span>
+                        <span className="text-lg font-bold text-green-500">{Math.max(Number((reportData?.trips?.completed ?? 0)) - Number((reportData?.trips?.delayed ?? 0)), 0)}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
-                        <div className="bg-green-500 h-2 rounded-full" style={{ width: "92%" }} />
+                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${uiStats.onTimeRate}%` }} />
                       </div>
                     </div>
 
                     <div className="p-4 rounded-lg bg-muted/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">Chuyến trễ</span>
-                        <span className="text-lg font-bold text-orange-500">17</span>
+                        <span className="text-lg font-bold text-orange-500">{Number(reportData?.trips?.delayed ?? 0)}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
-                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: "8%" }} />
+                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, uiStats.totalTrips ? ((Number(reportData?.trips?.delayed ?? 0) / uiStats.totalTrips) * 100) : 0))}%` }} />
                       </div>
                     </div>
 
@@ -522,11 +587,11 @@ export default function ReportsPage() {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Thời gian TB</p>
-                          <p className="font-semibold text-foreground mt-1">32 phút</p>
+                          <p className="font-semibold text-foreground mt-1">{Number(reportData?.trips?.averageDurationMinutes ?? 0)} phút</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Khoảng cách TB</p>
-                          <p className="font-semibold text-foreground mt-1">12.5 km</p>
+                          <p className="font-semibold text-foreground mt-1">{Number(reportData?.trips?.averageDistanceKm ?? 0)} km</p>
                         </div>
                       </div>
                     </div>
@@ -538,202 +603,496 @@ export default function ReportsPage() {
 
           {/* Buses Report */}
           <TabsContent value="buses" className="space-y-6">
-            {renderReportTable()}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               <Card className="border-border/50">
                 <CardHeader>
-                  <CardTitle>Tỷ lệ sử dụng xe buýt</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bus className="w-5 h-5" />
+                    Tỷ lệ sử dụng xe buýt
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Theo dõi hiệu suất sử dụng và tỷ lệ đúng giờ của từng xe
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={busUtilizationData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={busUtilizationData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="hsl(var(--muted-foreground))"
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        stroke="hsl(var(--muted-foreground))" 
+                        tickFormatter={(v)=> v + '%'}
+                        domain={[0, 100]}
+                        ticks={[0, 20, 40, 60, 80, 100]}
+                        tick={{ fontSize: 12 }}
+                      />
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
+                        cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-background border border-border rounded-lg shadow-lg p-4 space-y-2">
+                              <p className="font-semibold text-foreground">{data.name}</p>
+                              <div className="space-y-1 text-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Tỷ lệ sử dụng:</span>
+                                  <span className="font-semibold text-primary">{data.utilization}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Chuyến đi:</span>
+                                  <span className="font-medium">{data.trips}/{data.scheduledTrips}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Đúng giờ:</span>
+                                  <span className="font-medium text-green-600">{data.onTimeRate}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Ngày hoạt động:</span>
+                                  <span className="font-medium">{data.activeDays} ngày</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
                         }}
                       />
-                      <Bar dataKey="utilization" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                      <Bar 
+                        dataKey="utilization" 
+                        radius={[8, 8, 0, 0]}
+                        fill="url(#utilizationGradient)"
+                      >
+                        {busUtilizationData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`}
+                            fill={
+                              entry.utilization >= 80 ? '#10b981' : 
+                              entry.utilization >= 60 ? '#3b82f6' : 
+                              entry.utilization >= 40 ? '#f59e0b' : 
+                              '#ef4444'
+                            }
+                          />
+                        ))}
+                      </Bar>
+                      <defs>
+                        <linearGradient id="utilizationGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        </linearGradient>
+                      </defs>
                     </BarChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/50">
-                <CardHeader>
-                  <CardTitle>Hiệu suất xe buýt</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {busUtilizationData.map((bus, index) => (
-                      <div
-                        key={index}
-                        className="p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <Bus className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-foreground">{bus.name}</p>
-                              <p className="text-xs text-muted-foreground">{bus.trips} chuyến</p>
-                            </div>
-                          </div>
-                          <Badge variant={bus.utilization >= 90 ? "default" : "secondary"}>{bus.utilization}%</Badge>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${bus.utilization >= 90 ? "bg-green-500" : "bg-orange-500"}`}
-                            style={{ width: `${bus.utilization}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                  
+                  {/* Legend */}
+                  <div className="flex flex-wrap items-center justify-center gap-4 mt-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                      <span className="text-muted-foreground">Cao (≥80%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                      <span className="text-muted-foreground">Tốt (60-79%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-orange-500"></div>
+                      <span className="text-muted-foreground">Trung bình (40-59%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                      <span className="text-muted-foreground">Thấp (&lt;40%)</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Detailed Performance Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {busUtilizationData.length > 0 ? (
+                  busUtilizationData.map((bus, index) => (
+                    <Card key={index} className="border-border/50 hover:shadow-md transition-all">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                              bus.utilization >= 80 ? 'bg-green-500/10' :
+                              bus.utilization >= 60 ? 'bg-blue-500/10' :
+                              bus.utilization >= 40 ? 'bg-orange-500/10' : 'bg-red-500/10'
+                            }`}>
+                              <Bus className={`w-6 h-6 ${
+                                bus.utilization >= 80 ? 'text-green-600' :
+                                bus.utilization >= 60 ? 'text-blue-600' :
+                                bus.utilization >= 40 ? 'text-orange-600' : 'text-red-600'
+                              }`} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-foreground text-lg">{bus.name}</p>
+                              <p className="text-xs text-muted-foreground">Xe buýt</p>
+                            </div>
+                          </div>
+                          <Badge 
+                            variant={bus.utilization >= 80 ? "default" : "secondary"}
+                            className={`text-sm font-semibold ${
+                              bus.utilization >= 80 ? 'bg-green-500' :
+                              bus.utilization >= 60 ? 'bg-blue-500' :
+                              bus.utilization >= 40 ? 'bg-orange-500' : 'bg-red-500'
+                            } text-white`}
+                          >
+                            {bus.utilization}%
+                          </Badge>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">Tỷ lệ sử dụng</span>
+                            <span className="font-medium">{bus.trips}/{bus.scheduledTrips} chuyến</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                            <div
+                              className={`h-3 rounded-full transition-all duration-500 ${
+                                bus.utilization >= 80 ? 'bg-gradient-to-r from-green-500 to-green-600' :
+                                bus.utilization >= 60 ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
+                                bus.utilization >= 40 ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
+                                'bg-gradient-to-r from-red-500 to-red-600'
+                              }`}
+                              style={{ width: `${bus.utilization}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Clock className="w-3.5 h-3.5 text-green-600" />
+                              <span className="text-xs text-muted-foreground">Đúng giờ</span>
+                            </div>
+                            <p className="text-lg font-bold text-green-600">{bus.onTimeRate}%</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                              <span className="text-xs text-muted-foreground">Hoạt động</span>
+                            </div>
+                            <p className="text-lg font-bold text-blue-600">{bus.activeDays} ngày</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-8 text-muted-foreground">
+                    Không có dữ liệu xe buýt
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
 
           {/* Drivers Report */}
           <TabsContent value="drivers" className="space-y-6">
-            {renderReportTable()}
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle>Hiệu suất tài xế</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {driverPerformanceData.map((driver, index) => (
-                    <div
-                      key={index}
-                      className="p-4 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors"
+            <div className="grid grid-cols-1 gap-6">
+              {/* Chart Section */}
+              <Card className="border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Hiệu suất tài xế
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Theo dõi số chuyến và tỷ lệ đúng giờ của từng tài xế
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={driverPerformanceData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="font-bold text-primary">{index + 1}</span>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="hsl(var(--muted-foreground))"
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        yAxisId="left"
+                        stroke="hsl(var(--muted-foreground))" 
+                        tick={{ fontSize: 12 }}
+                        label={{ value: 'Số chuyến', angle: -90, position: 'insideLeft' }}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        stroke="hsl(var(--muted-foreground))" 
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(v) => v + '%'}
+                        domain={[0, 100]}
+                        label={{ value: 'Đúng giờ (%)', angle: 90, position: 'insideRight' }}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-background border border-border rounded-lg shadow-lg p-4 space-y-2">
+                              <p className="font-semibold text-foreground">{data.name}</p>
+                              <div className="space-y-1 text-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Số chuyến:</span>
+                                  <span className="font-semibold text-blue-600">{data.trips}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Đúng giờ:</span>
+                                  <span className="font-semibold text-green-600">{data.onTimeRate}%</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">Đánh giá:</span>
+                                  <span className="font-semibold text-yellow-600">{data.rating}/5.0</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar 
+                        yAxisId="left"
+                        dataKey="trips" 
+                        fill="#3b82f6"
+                        radius={[8, 8, 0, 0]}
+                        name="Số chuyến"
+                      />
+                      <Bar 
+                        yAxisId="right"
+                        dataKey="onTimeRate" 
+                        fill="#10b981"
+                        radius={[8, 8, 0, 0]}
+                        name="Đúng giờ (%)"
+                      />
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        formatter={(value) => {
+                          if (value === 'trips') return 'Số chuyến';
+                          if (value === 'onTimeRate') return 'Tỷ lệ đúng giờ (%)';
+                          return value;
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap items-center justify-center gap-4 mt-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                      <span className="text-muted-foreground">Số chuyến đi</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                      <span className="text-muted-foreground">Tỷ lệ đúng giờ</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Detailed Driver Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {driverPerformanceData.length > 0 ? (
+                  driverPerformanceData.map((driver, index) => (
+                    <Card key={index} className="border-border/50 hover:shadow-md transition-all">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                              index === 0 ? 'bg-yellow-500/20 text-yellow-700' :
+                              index === 1 ? 'bg-gray-400/20 text-gray-700' :
+                              index === 2 ? 'bg-orange-500/20 text-orange-700' :
+                              'bg-blue-500/10 text-blue-600'
+                            }`}>
+                              #{index + 1}
+                            </div>
+                            <div>
+                              <p className="font-bold text-foreground">{driver.name}</p>
+                              <p className="text-xs text-muted-foreground">Tài xế</p>
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-foreground">{driver.name}</p>
-                            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                              <span>{driver.trips} chuyến</span>
-                              <span>•</span>
-                              <span>Đúng giờ: {driver.onTimeRate}%</span>
-                              <span>•</span>
-                              <span>Đánh giá: {driver.rating}/5.0</span>
+                          <Badge 
+                            variant={driver.onTimeRate >= 90 ? "default" : "secondary"}
+                            className={`text-xs font-semibold ${
+                              driver.onTimeRate >= 90 ? 'bg-green-500 text-white' :
+                              driver.onTimeRate >= 85 ? 'bg-blue-500 text-white' :
+                              'bg-orange-500 text-white'
+                            }`}
+                          >
+                            {driver.onTimeRate >= 90 ? 'Xuất sắc' :
+                             driver.onTimeRate >= 85 ? 'Tốt' : 'TB'}
+                          </Badge>
+                        </div>
+
+                        {/* Stats Grid */}
+                        <div className="space-y-3">
+                          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Bus className="w-3.5 h-3.5 text-blue-600" />
+                              <span className="text-xs text-muted-foreground">Số chuyến</span>
+                            </div>
+                            <p className="text-2xl font-bold text-blue-600">{driver.trips}</p>
+                          </div>
+
+                          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Clock className="w-3.5 h-3.5 text-green-600" />
+                              <span className="text-xs text-muted-foreground">Đúng giờ</span>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-2xl font-bold text-green-600">{driver.onTimeRate}%</p>
+                            </div>
+                            {/* Progress bar */}
+                            <div className="w-full bg-green-200 dark:bg-green-900/30 rounded-full h-2 mt-2">
+                              <div
+                                className="h-2 rounded-full bg-green-600 transition-all duration-500"
+                                style={{ width: `${driver.onTimeRate}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-yellow-600 text-sm">⭐</span>
+                              <span className="text-xs text-muted-foreground">Đánh giá</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-2xl font-bold text-yellow-600">{driver.rating}</p>
+                              <span className="text-sm text-muted-foreground">/5.0</span>
+                            </div>
+                            {/* Star rating visual */}
+                            <div className="flex gap-1 mt-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <span key={star} className={`text-lg ${
+                                  star <= Math.floor(driver.rating) ? 'text-yellow-500' : 'text-gray-300'
+                                }`}>
+                                  ★
+                                </span>
+                              ))}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {driver.onTimeRate >= 90 ? (
-                            <Badge variant="default" className="bg-green-500/20 text-green-700 hover:bg-green-500/30">
-                              Xuất sắc
-                            </Badge>
-                          ) : driver.onTimeRate >= 85 ? (
-                            <Badge variant="default" className="bg-blue-500/20 text-blue-700 hover:bg-blue-500/30">
-                              Tốt
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="default"
-                              className="bg-orange-500/20 text-orange-700 hover:bg-orange-500/30"
-                            >
-                              Trung bình
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-8 text-muted-foreground">
+                    Không có dữ liệu tài xế
+                  </div>
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           {/* Students Report */}
           <TabsContent value="students" className="space-y-6">
             {renderReportTable()}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <div className="grid grid-cols-1 gap-6">
+              {/* Attendance Chart */}
               <Card className="border-border/50">
                 <CardHeader>
-                  <CardTitle>Tỷ lệ điểm danh</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Thống kê điểm danh học sinh
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Tỷ lệ có mặt và vắng mặt của học sinh
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={attendanceData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => {
-                          const p = Number(percent ?? 0)
-                          return `${name}: ${(p * 100).toFixed(0)}%`
-                        }}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {attendanceData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/50">
-                <CardHeader>
-                  <CardTitle>Thống kê học sinh</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {attendanceData.map((item, index) => (
-                      <div key={index} className="p-4 rounded-lg bg-muted/30">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
-                            <span className="text-sm font-medium text-foreground">{item.name}</span>
-                          </div>
-                          <span className="text-lg font-bold text-foreground">{item.value}</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <div
-                            className="h-2 rounded-full"
-                            style={{
-                              backgroundColor: item.color,
-                              width: `${(item.value / 490) * 100}%`,
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Pie Chart */}
+                    <div>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={attendanceData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={true}
+                            label={({ percent }) => 
+                              `${((percent || 0) * 100).toFixed(1)}%`
+                            }
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {attendanceData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (!active || !payload || !payload.length) return null;
+                              const data = payload[0];
+                              return (
+                                <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+                                  <p className="font-semibold" style={{ color: data.payload.color }}>
+                                    {data.name}
+                                  </p>
+                                  <p className="text-sm mt-1">
+                                    Số lượng: <span className="font-bold">{data.value}</span>
+                                  </p>
+                                </div>
+                              );
                             }}
                           />
-                        </div>
-                      </div>
-                    ))}
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
 
-                    <div className="pt-4 border-t border-border">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Tổng học sinh</p>
-                          <p className="font-semibold text-foreground mt-1">490</p>
+                    {/* Stats Cards */}
+                    <div className="space-y-3">
+                      {attendanceData.map((item, index) => (
+                        <div key={index} className="p-4 rounded-lg border border-border/50 hover:shadow-sm transition-all">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                style={{ backgroundColor: `${item.color}20` }}
+                              >
+                                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {((Number(item.value ?? 0) / Math.max(1, attendanceData.reduce((sum, d) => sum + Number(d.value ?? 0), 0))) * 100).toFixed(1)}%
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-2xl font-bold" style={{ color: item.color }}>
+                              {Number(item.value ?? 0)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="h-2.5 rounded-full transition-all duration-500"
+                              style={{
+                                backgroundColor: item.color,
+                                width: `${(Number(item.value ?? 0) / Math.max(1, attendanceData.reduce((sum, d) => sum + Number(d.value ?? 0), 0))) * 100}%`,
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-muted-foreground">Tỷ lệ có mặt</p>
-                          <p className="font-semibold text-green-500 mt-1">91.8%</p>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </CardContent>
@@ -805,87 +1164,7 @@ export default function ReportsPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Quick Export Options */}
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              Xuất báo cáo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={async () => {
-                  try {
-                    const blob = await apiClient.exportReport({ format: "pdf", type: "overview", from, to })
-                    const url = window.URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url
-                    a.download = `report_overview_${from}_${to}.pdf`
-                    document.body.appendChild(a)
-                    a.click()
-                    window.URL.revokeObjectURL(url)
-                    document.body.removeChild(a)
-                    toast({ title: "Thành công", description: "Đã xuất báo cáo PDF" })
-                  } catch (e) {
-                    toast({ title: "Lỗi", description: "Không thể xuất PDF", variant: "destructive" })
-                  }
-                }}
-              >
-                <Download className="w-6 h-6 text-primary" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo PDF</p>
-                  <p className="text-xs text-muted-foreground mt-1">Xuất báo cáo tổng quan</p>
-                </div>
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={async () => {
-                  try {
-                    const blob = await apiClient.exportReport({ format: "xlsx", type: "trips", from, to })
-                    const url = window.URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url
-                    a.download = `report_trips_${from}_${to}.xlsx`
-                    document.body.appendChild(a)
-                    a.click()
-                    window.URL.revokeObjectURL(url)
-                    document.body.removeChild(a)
-                    toast({ title: "Thành công", description: "Đã xuất báo cáo Excel" })
-                  } catch (e) {
-                    toast({ title: "Lỗi", description: "Không thể xuất Excel", variant: "destructive" })
-                  }
-                }}
-              >
-                <Download className="w-6 h-6 text-green-500" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo Excel</p>
-                  <p className="text-xs text-muted-foreground mt-1">Xuất dữ liệu chi tiết</p>
-                </div>
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className="gap-2 h-auto py-4 flex-col bg-transparent"
-                onClick={() => {
-                  // TODO: Mở dialog chọn khoảng thời gian
-                  toast({ title: "Thông báo", description: "Tính năng đang phát triển" })
-                }}
-              >
-                <Calendar className="w-6 h-6 text-orange-500" />
-                <div className="text-center">
-                  <p className="font-semibold">Báo cáo tùy chỉnh</p>
-                  <p className="text-xs text-muted-foreground mt-1">Chọn khoảng thời gian</p>
-                </div>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Quick Export Options removed per request */}
       </div>
     </DashboardLayout>
   )
