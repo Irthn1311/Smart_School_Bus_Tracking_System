@@ -657,7 +657,8 @@ class ApiClient {
     r_walk?: number;
     s_max?: number;
     c_bus?: number;
-    max_stops?: number | null;
+    max_routes?: number;
+    max_route_distance?: number;
     use_roads_api?: boolean;
     use_places_api?: boolean;
     split_virtual_nodes?: boolean;
@@ -675,12 +676,22 @@ class ApiClient {
     capacity?: number;
     route_name_prefix?: string;
     create_return_routes?: boolean;
+    clear_existing_routes?: boolean;
+    max_route_distance?: number;
     vrp_result?: any;
   }) {
     return this.request({
       method: "post",
       url: "/bus-stops/create-routes",
       data,
+    });
+  }
+
+  async deleteOldRoutes(routeIds: number[]) {
+    return this.request({
+      method: "delete",
+      url: "/bus-stops/old-routes",
+      data: { routeIds },
     });
   }
 

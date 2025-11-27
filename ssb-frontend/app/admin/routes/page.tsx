@@ -8,14 +8,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Edit, Trash2, Eye, MapPin, Clock, Search, Filter, AlertCircle, Route, Navigation, ArrowRight, MoreVertical, Sparkles } from "lucide-react"
+import { Plus, Edit, Trash2, Eye, MapPin, Clock, Search, Filter, AlertCircle, Route, Navigation, ArrowRight, MoreVertical, Zap } from "lucide-react"
 import { RouteBuilder } from "@/components/admin/route-builder"
-import { RouteSuggestionDialog } from "@/components/admin/route-suggestion-dialog"
+import { BusStopOptimizer } from "@/components/admin/bus-stop-optimizer"
 import { StatsCard } from "@/components/admin/stats-card"
 import { useRoutes, useDeleteRoute } from "@/lib/hooks/useRoutes"
 import { useRouter } from "next/navigation"
 import { useDebounce } from "@/lib/hooks/useDebounce"
 import { useToast } from "@/hooks/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,8 +46,8 @@ export default function RoutesPage() {
   const [routeTypeFilter, setRouteTypeFilter] = useState<string>("all") // 'all', 'di', 've'
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isSuggestionDialogOpen, setIsSuggestionDialogOpen] = useState(false)
   const [editingRoute, setEditingRoute] = useState<Route | null>(null)
+  const [activeTab, setActiveTab] = useState<"list" | "optimize">("list")
   
   const { mutate: deleteRoute } = useDeleteRoute()
 
@@ -110,12 +111,18 @@ export default function RoutesPage() {
   const groupedRoutes = useMemo(() => {
     const groups = new Map<string | number, Route[]>();
     const unpairedRoutes: Route[] = [];
+    const processedRouteIds = new Set<string | number>();
 
     routes.forEach((route) => {
       const raw = route.raw;
       const pairedRouteId = raw?.pairedRouteId || raw?.paired_route_id;
       const routeId = route.id;
       const routeType = raw?.routeType || raw?.route_type || 'both';
+
+      // Skip nếu đã được xử lý
+      if (processedRouteIds.has(routeId)) {
+        return;
+      }
 
       // Nếu có pairedRouteId, nhóm lại
       if (pairedRouteId) {
@@ -124,13 +131,77 @@ export default function RoutesPage() {
           groups.set(groupKey, []);
         }
         groups.get(groupKey)!.push(route);
-      } else {
-        // Nếu không có pairedRouteId, kiểm tra xem có tuyến nào khác trỏ đến nó không
-        const isPaired = routes.some(
-          (r) => (r.raw?.pairedRouteId || r.raw?.paired_route_id) === routeId
+        processedRouteIds.add(routeId);
+        
+        // Tìm tuyến đối ứng và thêm vào group
+        const pairedRoute = routes.find(
+          (r) => String(r.id) === String(pairedRouteId) && !processedRouteIds.has(r.id)
         );
-        if (!isPaired) {
-          unpairedRoutes.push(route);
+        if (pairedRoute) {
+          groups.get(groupKey)!.push(pairedRoute);
+          processedRouteIds.add(pairedRoute.id);
+        }
+      } else {
+        // Nếu không có pairedRouteId, thử tìm tuyến đối ứng dựa trên tên tuyến
+        // Ví dụ: "Tuyến Tối Ưu 1 - Đi" và "Tuyến Tối Ưu 1 (Về)" hoặc "Tuyến Tối Ưu 1 - Về"
+        const routeName = route.name || '';
+        let pairedRoute: Route | undefined;
+        
+        if (routeType === 'di') {
+          // Tìm tuyến về tương ứng - thử nhiều format
+          const baseName = routeName.replace(/\s*-\s*Đi\s*$/, '').replace(/\s*\(Đi\)\s*$/, '').trim();
+          pairedRoute = routes.find(
+            (r) => {
+              const rName = r.name || '';
+              const rType = r.raw?.routeType || r.raw?.route_type;
+              // Kiểm tra các format có thể: "Tuyến Tối Ưu 1 (Về)", "Tuyến Tối Ưu 1 - Về", hoặc baseName + " (Về)"
+              return (rName === `${baseName} (Về)` || 
+                      rName === `${baseName} - Về` ||
+                      rName.replace(/\s*\(Về\)\s*$/, '').replace(/\s*-\s*Về\s*$/, '').trim() === baseName) &&
+                     rType === 've' &&
+                     !processedRouteIds.has(r.id);
+            }
+          );
+        } else if (routeType === 've') {
+          // Tìm tuyến đi tương ứng - thử nhiều format
+          const baseName = routeName.replace(/\s*\(Về\)\s*$/, '').replace(/\s*-\s*Về\s*$/, '').trim();
+          pairedRoute = routes.find(
+            (r) => {
+              const rName = r.name || '';
+              const rType = r.raw?.routeType || r.raw?.route_type;
+              // Kiểm tra các format có thể: "Tuyến Tối Ưu 1 - Đi", "Tuyến Tối Ưu 1 (Đi)", hoặc baseName + " - Đi"
+              return (rName === `${baseName} - Đi` || 
+                      rName === `${baseName} (Đi)` ||
+                      rName.replace(/\s*-\s*Đi\s*$/, '').replace(/\s*\(Đi\)\s*$/, '').trim() === baseName) &&
+                     rType === 'di' &&
+                     !processedRouteIds.has(r.id);
+            }
+          );
+        }
+        
+        if (pairedRoute) {
+          // Tìm tuyến đối ứng, tạo group mới
+          const groupKey = String(Math.min(Number(routeId), Number(pairedRoute.id)));
+          if (!groups.has(groupKey)) {
+            groups.set(groupKey, []);
+          }
+          // Sắp xếp: tuyến đi trước, tuyến về sau
+          if (routeType === 'di') {
+            groups.get(groupKey)!.push(route, pairedRoute);
+          } else {
+            groups.get(groupKey)!.push(pairedRoute, route);
+          }
+          processedRouteIds.add(routeId);
+          processedRouteIds.add(pairedRoute.id);
+        } else {
+          // Kiểm tra xem có tuyến nào khác trỏ đến nó không
+          const isPaired = routes.some(
+            (r) => (r.raw?.pairedRouteId || r.raw?.paired_route_id) === routeId && !processedRouteIds.has(r.id)
+          );
+          if (!isPaired) {
+            unpairedRoutes.push(route);
+            processedRouteIds.add(routeId);
+          }
         }
       }
     });
@@ -315,23 +386,34 @@ export default function RoutesPage() {
             <h1 className="text-3xl font-bold text-foreground">{t("routes.title")}</h1>
             <p className="text-muted-foreground mt-1">{t("routes.description")}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsSuggestionDialogOpen(true)}
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              {t("routes.suggestRoute")}
-            </Button>
-            <Button 
-              className="bg-primary hover:bg-primary/90"
-              onClick={() => setIsAddDialogOpen(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {t("routes.addNew")}
-            </Button>
-          </div>
+          {activeTab === "list" && (
+            <div className="flex items-center gap-2">
+              <Button 
+                className="bg-primary hover:bg-primary/90"
+                onClick={() => setIsAddDialogOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t("routes.addNew")}
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "list" | "optimize")}>
+          <TabsList>
+            <TabsTrigger value="list">
+              <Route className="w-4 h-4 mr-2" />
+              Danh sách tuyến đường
+            </TabsTrigger>
+            <TabsTrigger value="optimize">
+              <Zap className="w-4 h-4 mr-2" />
+              Tối ưu hóa tuyến đường
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Tab: Danh sách tuyến đường */}
+          <TabsContent value="list" className="space-y-6 mt-6">
 
         {/* Stats */}
         {stats && (
@@ -715,18 +797,14 @@ export default function RoutesPage() {
              })}
            </div>
          )}
+          </TabsContent>
 
+          {/* Tab: Tối ưu hóa tuyến đường */}
+          <TabsContent value="optimize" className="mt-6">
+            <BusStopOptimizer />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      {/* Route Suggestion Dialog */}
-      <RouteSuggestionDialog
-        open={isSuggestionDialogOpen}
-        onOpenChange={setIsSuggestionDialogOpen}
-        onRoutesCreated={() => {
-          // Refresh routes list
-          window.location.reload();
-        }}
-      />
     </DashboardLayout>
   )
 }

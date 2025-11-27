@@ -37,7 +37,7 @@ export function useDistanceMatrix() {
  * Usage:
  * ```tsx
  * const { data, isLoading, isFetchedFromCacheFE, isBESaysCached } = useETA({
- *   origins: ['10.77653,106.700981'],
+ *   origins: ['10.760064662799088,106.6822422067464'],
  *   destinations: ['10.762622,106.660172'],
  *   mode: 'driving'
  * });

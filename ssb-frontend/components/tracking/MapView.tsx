@@ -147,7 +147,7 @@ export function MapView({
         stopMarkers.reduce((sum, s) => sum + s.kinhDo, 0) / stopMarkers.length;
       return { lat: avgLat, lng: avgLng };
     }
-    return { lat: 10.77653, lng: 106.700981 };
+    return { lat: 10.760064662799088, lng: 106.6822422067464 };
   }, [throttledBuses, stopMarkers]);
 
   return (

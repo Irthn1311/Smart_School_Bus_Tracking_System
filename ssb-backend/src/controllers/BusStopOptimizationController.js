@@ -3,6 +3,8 @@ import VehicleRoutingService from "../services/VehicleRoutingService.js";
 import ClusteringRoutingService from "../services/ClusteringRoutingService.js";
 import RouteFromOptimizationService from "../services/RouteFromOptimizationService.js";
 import ScheduleFromRoutesService from "../services/ScheduleFromRoutesService.js";
+import TuyenDuongModel from "../models/TuyenDuongModel.js";
+import LichTrinhModel from "../models/LichTrinhModel.js";
 
 /**
  * Controller cho Bus Stop Optimization và Vehicle Routing
@@ -109,7 +111,7 @@ class BusStopOptimizationController {
   static async optimizeVRP(req, res) {
     try {
       const {
-        depot = { lat: 10.77653, lng: 106.700981 }, // Đại học Sài Gòn mặc định
+        depot = { lat: 10.760064662799088, lng: 106.6822422067464 }, // Đại học Sài Gòn mặc định
         capacity = 40,
         split_virtual_nodes = true,
       } = req.body;
@@ -165,11 +167,12 @@ class BusStopOptimizationController {
   static async optimizeFull(req, res) {
     try {
       const {
-        school_location = { lat: 10.77653, lng: 106.700981 },
+        school_location = { lat: 10.760064662799088, lng: 106.6822422067464 },
         r_walk = 500,
         s_max = 25,
         c_bus = 40,
-        max_stops = null,
+        max_routes = 4,
+        max_route_distance = 50, // km - Giới hạn quãng đường tối đa của một tuyến
         use_roads_api = true,
         use_places_api = true,
         split_virtual_nodes = true,
@@ -198,6 +201,28 @@ class BusStopOptimizationController {
         });
       }
 
+      // Validate max_routes
+      if (max_routes <= 0 || max_routes > 100) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_PARAMETER",
+            message: "max_routes phải trong khoảng (0, 100]",
+          },
+        });
+      }
+
+      // Validate max_route_distance
+      if (max_route_distance <= 0 || max_route_distance > 200) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_PARAMETER",
+            message: "max_route_distance phải trong khoảng (0, 200] km",
+          },
+        });
+      }
+
       console.log(`[BusStopOptimization] Starting full optimization pipeline (Clustering-First)`);
 
       // Sử dụng Clustering-First approach thay vì Sweep Algorithm
@@ -211,105 +236,86 @@ class BusStopOptimizationController {
         max_distance_from_school: max_distance_from_school,
       });
 
-      // Tạo routes trong DB với polyline
-      console.log(`[BusStopOptimization] Creating routes in database...`);
+      // 🔥 CHỈ TÍNH TOÁN VÀ TRẢ VỀ KẾT QUẢ, KHÔNG TẠO ROUTES TRONG DB
+      console.log(`[BusStopOptimization] Computing polylines for preview (not saving to DB)...`);
       const depot = {
         lat: school_location.lat,
         lng: school_location.lng,
         name: school_location.name || "Đại học Sài Gòn",
       };
 
-      // Format vrpResult để tương thích với RouteFromOptimizationService
-      const vrpResult = {
-        routes: clusteringResult.tier2.routes,
-        stats: clusteringResult.tier2.stats,
-      };
+      // Giới hạn số routes theo max_routes
+      const routesToPreview = clusteringResult.tier2.routes.slice(0, max_routes);
+      
+      // Tính polyline cho preview (không lưu DB)
+      // Xử lý tách routes nếu vượt quá max_route_distance
+      let routesToPreviewWithDistance = routesToPreview;
+      if (max_route_distance) {
+        const processedRoutes = [];
+        for (const route of routesToPreview) {
+          if ((route.estimatedDistance || 0) > max_route_distance) {
+            console.log(`[BusStopOptimization] Route estimated distance (${(route.estimatedDistance || 0).toFixed(2)}km) exceeds max (${max_route_distance}km), will be split when creating routes`);
+            // Giữ nguyên route để preview, nhưng sẽ được tách khi tạo routes
+          }
+          processedRoutes.push(route);
+        }
+        routesToPreviewWithDistance = processedRoutes;
+      }
 
-      // Tạo routes trong DB
-      const routesResult = await RouteFromOptimizationService.createRoutesFromVRP({
-        vrpResult: vrpResult,
-        depot: depot,
-        capacity: c_bus,
-        routeNamePrefix: "Tuyến Tối Ưu",
-        createReturnRoutes: false, // Chỉ tạo tuyến đi (don_sang)
-      });
-
-      console.log(`[BusStopOptimization] ✅ Created ${routesResult.routes.length} routes in database`);
-
-      // Lấy polyline từ DB cho tất cả routes
-      const TuyenDuongModel = (await import("../models/TuyenDuongModel.js")).default;
-      const routePolylines = await Promise.all(
-        routesResult.routes.map(async (dbRoute) => {
+      const routesWithPolylines = await Promise.all(
+        routesToPreviewWithDistance.map(async (route, idx) => {
           try {
-            const route = await TuyenDuongModel.getById(dbRoute.maTuyen);
-            return { maTuyen: dbRoute.maTuyen, polyline: route?.polyline || null };
+            // Tính polyline và độ dài thực tế cho route này (chỉ để preview)
+            const { polyline, distance } = await RouteFromOptimizationService.computePolylineForRoute({
+              route,
+              depot,
+              routeIndex: idx + 1,
+            });
+            
+            return {
+              ...route,
+              routeId: route.routeId || (idx + 1),
+              polyline: polyline || null,
+              actualDistance: distance || route.estimatedDistance || 0, // Độ dài thực tế từ Maps API
+            };
           } catch (error) {
-            console.warn(`[BusStopOptimization] ⚠️ Could not fetch polyline for route ${dbRoute.maTuyen}:`, error.message);
-            return { maTuyen: dbRoute.maTuyen, polyline: null };
+            console.warn(`[BusStopOptimization] ⚠️ Could not compute polyline for route ${idx + 1}:`, error.message);
+            return {
+              ...route,
+              routeId: route.routeId || (idx + 1),
+              polyline: null,
+              actualDistance: route.estimatedDistance || 0,
+            };
           }
         })
       );
-      const polylineMap = new Map(routePolylines.map(r => [r.maTuyen, r.polyline]));
-      console.log(`[BusStopOptimization] ✅ Fetched polylines for ${routePolylines.filter(r => r.polyline).length}/${routesResult.routes.length} routes`);
+
+      console.log(`[BusStopOptimization] ✅ Computed polylines for ${routesWithPolylines.filter(r => r.polyline).length}/${routesWithPolylines.length} routes (preview only)`);
 
       // Format routes để tương thích với frontend
-      // Frontend expect: { routeId, nodes, totalDemand, stopCount, estimatedDistance, polyline }
-      console.log(`[BusStopOptimization] Formatting routes: ${routesResult.routes.length} DB routes, ${clusteringResult.tier2.routes.length} clustering routes`);
-      
-      const formattedRoutes = routesResult.routes.map((dbRoute, idx) => {
-        // Lấy thông tin từ clustering result (có đầy đủ nodes với viDo, kinhDo, etc.)
-        const originalRoute = clusteringResult.tier2.routes[idx];
-        
-        const routePolyline = polylineMap.get(dbRoute.maTuyen);
-        
-        if (!originalRoute) {
-          console.warn(`[BusStopOptimization] ⚠️ No original route found for index ${idx}, using DB route only`);
-          return {
-            routeId: dbRoute.maTuyen,
-            nodes: [],
-            totalDemand: dbRoute.totalDemand || 0,
-            stopCount: dbRoute.stopCount || 0,
-            estimatedDistance: 0,
-            maTuyen: dbRoute.maTuyen,
-            tenTuyen: dbRoute.tenTuyen,
-            polyline: routePolyline || null, // Polyline từ DB
-          };
-        }
+      const formattedRoutes = routesWithPolylines.map((route, idx) => ({
+        routeId: route.routeId || (idx + 1),
+        nodes: route.nodes || [],
+        totalDemand: route.totalDemand || 0,
+        stopCount: route.stopCount || 0,
+        estimatedDistance: route.estimatedDistance || 0,
+        maTuyen: null, // Chưa có ID vì chưa lưu DB
+        tenTuyen: `Tuyến Tối Ưu ${idx + 1} - Đi`, // Tên tạm để preview
+        polyline: route.polyline || null,
+      }));
 
-        return {
-          routeId: dbRoute.maTuyen,
-          nodes: originalRoute.nodes || [],
-          totalDemand: dbRoute.totalDemand || originalRoute.totalDemand || 0,
-          stopCount: dbRoute.stopCount || originalRoute.stopCount || 0,
-          estimatedDistance: originalRoute.estimatedDistance || 0,
-          maTuyen: dbRoute.maTuyen,
-          tenTuyen: dbRoute.tenTuyen,
-          polyline: routePolyline || null, // Polyline từ DB (depot → stops → depot)
-        };
-      });
-
-      console.log(`[BusStopOptimization] ✅ Formatted ${formattedRoutes.length} routes for frontend`);
-      console.log(`[BusStopOptimization] Sample route:`, formattedRoutes[0] ? {
-        routeId: formattedRoutes[0].routeId,
-        nodesCount: formattedRoutes[0].nodes?.length || 0,
-        totalDemand: formattedRoutes[0].totalDemand,
-        stopCount: formattedRoutes[0].stopCount,
-      } : 'No routes');
-
-      // Đảm bảo formattedRoutes không rỗng
-      if (formattedRoutes.length === 0) {
-        console.error(`[BusStopOptimization] ⚠️ No formatted routes! Using clustering routes as fallback`);
-        // Fallback: dùng routes từ clustering result nếu formattedRoutes rỗng
-        formattedRoutes.push(...clusteringResult.tier2.routes.map((route, idx) => ({
-          routeId: routesResult.routes[idx]?.maTuyen || route.routeId || (idx + 1),
-          nodes: route.nodes || [],
-          totalDemand: route.totalDemand || 0,
-          stopCount: route.stopCount || 0,
-          estimatedDistance: route.estimatedDistance || 0,
-        })));
-      }
+      console.log(`[BusStopOptimization] ✅ Formatted ${formattedRoutes.length} routes for preview`);
 
       // Format response để tương thích với frontend
+      // Lưu vrpResult để có thể tạo routes sau
+      const vrpResult = {
+        routes: routesToPreview,
+        stats: {
+          ...clusteringResult.tier2.stats,
+          totalRoutes: routesToPreview.length,
+        },
+      };
+
       const result = {
         tier1: clusteringResult.tier1,
         tier2: {
@@ -329,14 +335,21 @@ class BusStopOptimizationController {
             ? (formattedRoutes.reduce((sum, r) => sum + (r.stopCount || 0), 0) / formattedRoutes.length).toFixed(2)
             : clusteringResult.tier2.stats.averageStopsPerRoute,
         },
+        vrpResult: vrpResult, // Lưu để có thể tạo routes sau
+        optimizationParams: {
+          depot,
+          capacity: c_bus,
+          max_routes,
+          max_route_distance,
+        },
       };
 
-      console.log(`[BusStopOptimization] ✅ Final result: ${result.tier2.routes.length} routes, ${result.summary.totalRoutes} total routes`);
+      console.log(`[BusStopOptimization] ✅ Final result: ${result.tier2.routes.length} routes (preview only, not saved to DB)`);
 
       res.status(200).json({
         success: true,
         data: result,
-        message: `Tối ưu hóa hoàn chỉnh thành công: ${result.summary.totalStops} điểm dừng, ${result.summary.totalRoutes} tuyến xe`,
+        message: `Tối ưu hóa hoàn chỉnh thành công: ${result.summary.totalStops} điểm dừng, ${result.summary.totalRoutes} tuyến xe (chưa lưu vào database)`,
       });
     } catch (error) {
       console.error("Error in BusStopOptimizationController.optimizeFull:", error);
@@ -402,16 +415,18 @@ class BusStopOptimizationController {
 
   /**
    * POST /api/v1/bus-stops/create-routes
-   * Tạo tuyến đường từ kết quả VRP optimization
+   * Tạo tuyến đường từ kết quả VRP optimization và xóa tuyến cũ nếu cần
    */
   static async createRoutes(req, res) {
     try {
       const {
-        vrp_result = null, // Optional: kết quả VRP nếu đã có
-        depot = { lat: 10.77653, lng: 106.700981, name: "Đại học Sài Gòn" },
+        vrp_result = null, // Kết quả VRP từ optimizeFull
+        depot = { lat: 10.760064662799088, lng: 106.6822422067464, name: "Đại học Sài Gòn" },
         capacity = 40,
         route_name_prefix = "Tuyến Tối Ưu",
-        create_return_routes = true,
+        create_return_routes = false, // Mặc định chỉ tạo tuyến đi
+        clear_existing_routes = true, // Mặc định xóa tuyến cũ
+        max_route_distance = 50, // km - Giới hạn quãng đường tối đa của một tuyến
       } = req.body;
 
       // Validate depot
@@ -425,14 +440,29 @@ class BusStopOptimizationController {
         });
       }
 
-      console.log(`[BusStopOptimization] Creating routes from VRP optimization`);
+      // Validate vrp_result
+      if (!vrp_result || !vrp_result.routes || vrp_result.routes.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_PARAMETER",
+            message: "vrp_result phải có routes",
+          },
+        });
+      }
 
+      console.log(`[BusStopOptimization] Creating routes from VRP optimization`);
+      console.log(`[BusStopOptimization] Will clear existing routes: ${clear_existing_routes}`);
+
+      // Tạo routes trong DB
       const result = await RouteFromOptimizationService.createRoutesFromVRP({
         vrpResult: vrp_result,
         depot,
         capacity,
         routeNamePrefix: route_name_prefix,
         createReturnRoutes: create_return_routes,
+        clearExistingRoutes: clear_existing_routes,
+        maxRouteDistance: max_route_distance,
       });
 
       res.status(200).json({
@@ -488,6 +518,116 @@ class BusStopOptimizationController {
         error: {
           code: "INTERNAL_ERROR",
           message: error.message || "Lỗi server khi tạo lịch trình",
+        },
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/bus-stops/old-routes
+   * Xóa các tuyến cũ từ optimization (chỉ xóa tuyến không có schedule)
+   */
+  static async deleteOldRoutes(req, res) {
+    try {
+      const { routeIds = [] } = req.body;
+
+      if (!Array.isArray(routeIds) || routeIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_PARAMETER",
+            message: "routeIds phải là mảng không rỗng",
+          },
+        });
+      }
+
+      console.log(`[BusStopOptimization] Deleting ${routeIds.length} old routes...`);
+
+      const deletedRoutes = [];
+      const cannotDeleteRoutes = [];
+      const errors = [];
+
+      // Kiểm tra và xóa từng route
+      for (const routeId of routeIds) {
+        try {
+          // Kiểm tra route có tồn tại không
+          const route = await TuyenDuongModel.getById(routeId);
+          if (!route) {
+            errors.push({ routeId, error: "Route not found" });
+            continue;
+          }
+
+          // Kiểm tra route có schedule không
+          const schedules = await LichTrinhModel.getByRouteId(routeId);
+          if (schedules.length > 0) {
+            cannotDeleteRoutes.push({
+              maTuyen: routeId,
+              tenTuyen: route.tenTuyen,
+              scheduleCount: schedules.length,
+            });
+            continue;
+          }
+
+          // Xóa route (hard delete)
+          // Xóa tuyến về trước (nếu có), sau đó xóa tuyến đi (tránh foreign key constraint)
+          if (route.routeType === 've') {
+            await TuyenDuongModel.hardDelete(routeId);
+            deletedRoutes.push({
+              maTuyen: routeId,
+              tenTuyen: route.tenTuyen,
+            });
+            console.log(`[BusStopOptimization] ✅ Deleted return route: ${route.tenTuyen} (ID: ${routeId})`);
+          }
+        } catch (error) {
+          console.error(`[BusStopOptimization] Error processing route ${routeId}:`, error);
+          errors.push({ routeId, error: error.message });
+        }
+      }
+
+      // Xóa tuyến đi sau (sau khi đã xóa tuyến về)
+      for (const routeId of routeIds) {
+        try {
+          const route = await TuyenDuongModel.getById(routeId);
+          if (!route) continue;
+
+          const schedules = await LichTrinhModel.getByRouteId(routeId);
+          if (schedules.length > 0) continue;
+
+          if (route.routeType === 'di' || !route.routeType) {
+            await TuyenDuongModel.hardDelete(routeId);
+            // Chỉ thêm vào deletedRoutes nếu chưa có (tránh duplicate)
+            if (!deletedRoutes.find(r => r.maTuyen === routeId)) {
+              deletedRoutes.push({
+                maTuyen: routeId,
+                tenTuyen: route.tenTuyen,
+              });
+            }
+            console.log(`[BusStopOptimization] ✅ Deleted route: ${route.tenTuyen} (ID: ${routeId})`);
+          }
+        } catch (error) {
+          console.error(`[BusStopOptimization] Error processing route ${routeId}:`, error);
+          if (!errors.find(e => e.routeId === routeId)) {
+            errors.push({ routeId, error: error.message });
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          deleted: deletedRoutes,
+          cannotDelete: cannotDeleteRoutes,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+        message: `Đã xóa ${deletedRoutes.length} tuyến đường. ${cannotDeleteRoutes.length > 0 ? `${cannotDeleteRoutes.length} tuyến không thể xóa (có lịch trình).` : ''}`,
+      });
+    } catch (error) {
+      console.error("Error in BusStopOptimizationController.deleteOldRoutes:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error.message || "Lỗi server khi xóa tuyến đường cũ",
         },
       });
     }

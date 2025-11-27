@@ -385,7 +385,39 @@ class MapsService {
     )}&mode=${mode}${avoidStr}${departureTimeStr}${trafficModelStr}&language=${language}&units=${units}&key=${MAPS_API_KEY}`;
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      // Check response status before parsing
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`[MapsService] Distance Matrix API HTTP error ${response.status}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          contentType: response.headers.get("content-type"),
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Distance Matrix API HTTP error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      // Check Content-Type header
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error(`[MapsService] Distance Matrix API returned non-JSON response:`, {
+          contentType,
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Distance Matrix API returned non-JSON response (${contentType}). This usually indicates an API key issue or API error.`
+        );
+      }
+
       const data = await response.json();
 
       if (data.status !== "OK") {
@@ -455,7 +487,39 @@ class MapsService {
     const url = `${MAPS_API_BASE_URL}/geocode/json?${query}&language=${language}&key=${MAPS_API_KEY}`;
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      // Check response status before parsing
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`[MapsService] Geocoding API HTTP error ${response.status}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          contentType: response.headers.get("content-type"),
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Geocoding API HTTP error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      // Check Content-Type header
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error(`[MapsService] Geocoding API returned non-JSON response:`, {
+          contentType,
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Geocoding API returned non-JSON response (${contentType}). This usually indicates an API key issue or API error.`
+        );
+      }
+
       const data = await response.json();
 
       if (data.status !== "OK") {
@@ -537,9 +601,51 @@ class MapsService {
       pathStr
     )}${interpolateStr}&key=${MAPS_API_KEY}`;
 
+    // Log request details (without API key for security)
+    const urlWithoutKey = url.replace(/key=[^&]+/, "key=***");
+    console.log(`[MapsService] Calling Roads API snapToRoads:`, {
+      pathPoints: path.length,
+      interpolate,
+      url: urlWithoutKey,
+    });
+
     try {
-      const response = await fetch(url);
-      const data = await response.json();
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      // Read response text once (can only be read once)
+      const responseText = await response.text();
+      const contentType = response.headers.get("content-type");
+
+      // Check response status before parsing
+      if (!response.ok) {
+        console.error(`[MapsService] Roads API HTTP error ${response.status}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          contentType,
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Roads API HTTP error: ${response.status} ${response.statusText}. Response: ${responseText.substring(0, 100)}`
+        );
+      }
+
+      // Check Content-Type header
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error(`[MapsService] Roads API returned non-JSON response:`, {
+          contentType,
+          responsePreview: responseText.substring(0, 200),
+        });
+        throw new Error(
+          `Maps Roads API returned non-JSON response (${contentType}). This usually indicates an API key issue or API error. Response preview: ${responseText.substring(0, 200)}`
+        );
+      }
+
+      // Parse JSON from the response text
+      const data = JSON.parse(responseText);
 
       if (data.error) {
         throw new Error(

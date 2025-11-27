@@ -392,7 +392,7 @@ export default function RouteDetailPage() {
                     !isNaN(Number(route.origin_lat)) && !isNaN(Number(route.origin_lng)) &&
                     isFinite(Number(route.origin_lat)) && isFinite(Number(route.origin_lng))
                   ? { lat: Number(route.origin_lat), lng: Number(route.origin_lng) }
-                  : { lat: 10.77653, lng: 106.700981 }
+                  : { lat: 10.760064662799088, lng: 106.6822422067464 }
               }
               zoom={sortedStops.length > 0 ? 14 : 13}
               polyline={route.polyline || null}
