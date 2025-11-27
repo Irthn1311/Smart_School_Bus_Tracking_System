@@ -18,13 +18,22 @@ export function useSocket() {
 
     // Global window bridge from socket service (works even if socket is created later)
     window.addEventListener("socketConnected", handleConnect as EventListener);
-    window.addEventListener("socketDisconnected", handleDisconnect as EventListener);
+    window.addEventListener(
+      "socketDisconnected",
+      handleDisconnect as EventListener
+    );
 
     return () => {
       socket?.off("connect", handleConnect);
       socket?.off("disconnect", handleDisconnect);
-      window.removeEventListener("socketConnected", handleConnect as EventListener);
-      window.removeEventListener("socketDisconnected", handleDisconnect as EventListener);
+      window.removeEventListener(
+        "socketConnected",
+        handleConnect as EventListener
+      );
+      window.removeEventListener(
+        "socketDisconnected",
+        handleDisconnect as EventListener
+      );
     };
   }, []);
 
@@ -233,22 +242,62 @@ export function useTripBusPosition(tripId?: number) {
   const { isConnected } = useSocket();
 
   useEffect(() => {
-    if (!tripId || !isConnected) return;
+    console.log("[useTripBusPosition] useEffect triggered:", {
+      tripId,
+      isConnected,
+    });
+    if (!tripId || !isConnected) {
+      console.log(
+        "[useTripBusPosition] Skipping - tripId or connection missing"
+      );
+      return;
+    }
 
     const socket = socketService.getSocket();
+    console.log(
+      "[useTripBusPosition] Socket instance:",
+      socket ? "available" : "null"
+    );
     // join trip room to receive updates
     try {
-      console.log('[useTripBusPosition] join_trip', tripId);
-      socket?.emit('join_trip', tripId);
-    } catch {}
+      console.log("[useTripBusPosition] Emitting join_trip", tripId);
+      socket?.emit("join_trip", tripId);
+    } catch (e) {
+      console.error("[useTripBusPosition] Error joining trip:", e);
+    }
+
+    // 🔥 Listen for trip_joined confirmation
+    const handleTripJoined = (data: any) => {
+      console.log("[useTripBusPosition] ✅ trip_joined confirmation:", data);
+    };
+    socket?.on("trip_joined", handleTripJoined);
 
     const onData = (data: any) => {
-      if (!data) return;
+      console.log("[useTripBusPosition] 📡 Received position data:", data);
+      if (!data) {
+        console.log("[useTripBusPosition] No data received");
+        return;
+      }
       const tId = data.tripId ?? data.trip_id;
-      if ((tId + '') !== (tripId + '')) return;
+      console.log("[useTripBusPosition] Comparing tripId:", {
+        received: tId,
+        expected: tripId,
+      });
+      if (tId + "" !== tripId + "") {
+        console.log("[useTripBusPosition] TripId mismatch - ignoring");
+        return;
+      }
       const lat = data.lat ?? data.latitude ?? data.coords?.lat;
       const lng = data.lng ?? data.longitude ?? data.coords?.lng;
-      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      console.log("[useTripBusPosition] Extracted coords:", { lat, lng });
+      if (typeof lat !== "number" || typeof lng !== "number") {
+        console.log("[useTripBusPosition] Invalid coordinates - ignoring");
+        return;
+      }
+      console.log("[useTripBusPosition] ✅ Setting bus position:", {
+        lat,
+        lng,
+      });
       setBusPosition({
         lat,
         lng,
@@ -261,29 +310,37 @@ export function useTripBusPosition(tripId?: number) {
 
     // Listen to socket events directly
     const socketHandler = (payload: any) => {
-      console.log('[useTripBusPosition] socket event', payload);
+      console.log("[useTripBusPosition] socket event", payload);
       onData(payload);
     };
-    socket?.on('bus_position_update', socketHandler);
-    socket?.on('bus_location_update', socketHandler);
+    socket?.on("bus_position_update", socketHandler);
+    socket?.on("bus_location_update", socketHandler);
 
     // Fallback to DOM CustomEvents (in case other parts rebroadcast)
     const domHandler = (event: Event) => {
       const d = (event as CustomEvent).detail;
-      console.log('[useTripBusPosition] DOM event', d);
+      console.log("[useTripBusPosition] DOM event", d);
       onData(d);
     };
-    window.addEventListener('busPositionUpdate', domHandler as EventListener);
-    window.addEventListener('busLocationUpdate', domHandler as EventListener);
+    window.addEventListener("busPositionUpdate", domHandler as EventListener);
+    window.addEventListener("busLocationUpdate", domHandler as EventListener);
 
     return () => {
+      console.log("[useTripBusPosition] Cleanup - leaving trip", tripId);
       try {
-        socket?.emit('leave_trip', tripId);
+        socket?.emit("leave_trip", tripId);
       } catch {}
-      socket?.off('bus_position_update', socketHandler);
-      socket?.off('bus_location_update', socketHandler);
-      window.removeEventListener('busPositionUpdate', domHandler as EventListener);
-      window.removeEventListener('busLocationUpdate', domHandler as EventListener);
+      socket?.off("trip_joined", handleTripJoined);
+      socket?.off("bus_position_update", socketHandler);
+      socket?.off("bus_location_update", socketHandler);
+      window.removeEventListener(
+        "busPositionUpdate",
+        domHandler as EventListener
+      );
+      window.removeEventListener(
+        "busLocationUpdate",
+        domHandler as EventListener
+      );
     };
   }, [tripId, isConnected]);
 
@@ -304,30 +361,30 @@ export function useTripAlerts(tripId?: number) {
 
     const onApproach = (data: any) => {
       const tId = data?.tripId ?? data?.trip_id;
-      if ((tId + "") !== (tripId + "")) return;
+      if (tId + "" !== tripId + "") return;
       setApproachStop(data);
     };
     const onDelay = (data: any) => {
       const tId = data?.tripId ?? data?.trip_id;
-      if ((tId + "") !== (tripId + "")) return;
+      if (tId + "" !== tripId + "") return;
       setDelayAlert(data);
     };
 
     // Direct socket listeners
-    socket?.on('approach_stop', onApproach);
-    socket?.on('delay_alert', onDelay);
+    socket?.on("approach_stop", onApproach);
+    socket?.on("delay_alert", onDelay);
 
     // DOM bridge fallback
     const domApproach = (e: Event) => onApproach((e as CustomEvent).detail);
     const domDelay = (e: Event) => onDelay((e as CustomEvent).detail);
-    window.addEventListener('approachStop', domApproach as EventListener);
-    window.addEventListener('delayAlert', domDelay as EventListener);
+    window.addEventListener("approachStop", domApproach as EventListener);
+    window.addEventListener("delayAlert", domDelay as EventListener);
 
     return () => {
-      socket?.off('approach_stop', onApproach);
-      socket?.off('delay_alert', onDelay);
-      window.removeEventListener('approachStop', domApproach as EventListener);
-      window.removeEventListener('delayAlert', domDelay as EventListener);
+      socket?.off("approach_stop", onApproach);
+      socket?.off("delay_alert", onDelay);
+      window.removeEventListener("approachStop", domApproach as EventListener);
+      window.removeEventListener("delayAlert", domDelay as EventListener);
     };
   }, [tripId, isConnected]);
 

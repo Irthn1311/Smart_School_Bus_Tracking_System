@@ -32,6 +32,13 @@ export default function ParentDashboard() {
   const [selectedTripId, setSelectedTripId] = useState<number | undefined>(
     undefined
   );
+  const [tripStatus, setTripStatus] = useState<string | null>(null); // Track trip status
+  const [morningTripStatus, setMorningTripStatus] = useState<string | null>(
+    null
+  ); // Track morning trip status
+  const [afternoonTripStatus, setAfternoonTripStatus] = useState<string | null>(
+    null
+  ); // Track afternoon trip status
 
   const { busPosition } = useTripBusPosition(selectedTripId);
   const [busLocation, setBusLocation] = useState<{
@@ -48,9 +55,19 @@ export default function ParentDashboard() {
     description?: string;
   } | null>(null);
   const [stops, setStops] = useState<
-    { id: string; lat: number; lng: number; label?: string }[]
+    {
+      id: string;
+      lat: number;
+      lng: number;
+      label?: string;
+      sequence?: number;
+    }[]
   >([]);
   const [routePolyline, setRoutePolyline] = useState<string | null>(null);
+  const [dynamicDirections, setDynamicDirections] = useState<string | null>(
+    null
+  ); // 🔥 NEW: Dynamic route from bus to next stop
+  const [currentStopIndex, setCurrentStopIndex] = useState<number>(0); // 🔥 NEW: Track current stop
   const [busInfo, setBusInfo] = useState<{
     id: string;
     plateNumber: string;
@@ -94,7 +111,17 @@ export default function ParentDashboard() {
 
   // Update local position whenever realtime event arrives
   // 🔥 FIX: Sử dụng useMemo để tránh infinite loop
+  // 🔥 DEBUG: Log when hook receives position
   useEffect(() => {
+    console.log("[Parent DEBUG] busPosition from hook:", busPosition);
+    console.log("[Parent DEBUG] tripStatus:", tripStatus);
+
+    // 🔥 FIX: Stop updating bus position if trip is completed
+    if (tripStatus === "hoan_thanh" || tripStatus === "da_hoan_thanh") {
+      console.log("[Parent] Trip completed, stopping bus position updates");
+      return;
+    }
+
     if (
       busPosition &&
       Number.isFinite(busPosition.lat) &&
@@ -125,20 +152,24 @@ export default function ParentDashboard() {
     }
     // 🔥 FIX: Chỉ depend vào giá trị cụ thể, không phải object reference
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busPosition?.lat, busPosition?.lng, busPosition?.heading]);
+  }, [busPosition?.lat, busPosition?.lng, busPosition?.heading, tripStatus]);
 
   // Day 4: show alerts for approach_stop & delay_alert
   useEffect(() => {
     if (!approachStop) return;
 
-    const stopName = approachStop.stopName || approachStop.stop_name || "điểm dừng";
+    const stopName =
+      approachStop.stopName || approachStop.stop_name || "điểm dừng";
     const distance = approachStop.distance_m || approachStop.distance || 0;
-    const etaMinutes = approachStop.eta?.etaMinutes || Math.round(distance / 1000 * 2);
+    const etaMinutes =
+      approachStop.eta?.etaMinutes || Math.round((distance / 1000) * 2);
 
     // Show toast notification
     toast({
       title: "🚏 Xe sắp đến điểm dừng",
-      description: `Xe đang cách ${stopName} khoảng ${Math.round(distance)}m (~${etaMinutes} phút)`,
+      description: `Xe đang cách ${stopName} khoảng ${Math.round(
+        distance
+      )}m (~${etaMinutes} phút)`,
       duration: 5000,
     });
 
@@ -170,9 +201,7 @@ export default function ParentDashboard() {
 
     setBanner((prev) => {
       const isSameWarning =
-        prev &&
-        prev.type === "warning" &&
-        prev.description === description;
+        prev && prev.type === "warning" && prev.description === description;
 
       if (!prev || prev.type !== "warning") {
         toast({
@@ -234,18 +263,23 @@ export default function ParentDashboard() {
         title: title,
         description: content,
         variant: notifType === "warning" ? "destructive" : "default",
+        duration: notifType === "warning" ? 10000 : 7000, // Warnings stay longer
+        className:
+          notifType === "warning"
+            ? "text-lg font-bold border-2 border-red-500"
+            : "text-lg font-semibold",
       });
 
       // Add to recent notifications list (max 10 items)
       setRecentNotifications((prev) => {
-        console.log('📋 [PARENT DASH] Adding notification to recent list:', {
+        console.log("📋 [PARENT DASH] Adding notification to recent list:", {
           maThongBao: data.maThongBao,
           loaiThongBao: data.loaiThongBao,
           tieuDe: data.tieuDe,
           title: title,
-          calculatedType: notifType
-        })
-        
+          calculatedType: notifType,
+        });
+
         const newNotif = {
           id: data.maThongBao || Date.now(), // ← FIX: Thêm ID từ payload
           type: notifType,
@@ -254,7 +288,11 @@ export default function ParentDashboard() {
           timestamp: Date.now(),
         };
         const updated = [newNotif, ...prev].slice(0, 10);
-        console.log('✅ [PARENT DASH] Updated recent notifications:', updated.length, updated)
+        console.log(
+          "✅ [PARENT DASH] Updated recent notifications:",
+          updated.length,
+          updated
+        );
         return updated;
       });
 
@@ -298,14 +336,25 @@ export default function ParentDashboard() {
                 firstChild.trangThaiHocSinh ||
                 tripInfo.trangThaiHocSinh ||
                 "cho_don";
-              let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" = "waiting";
+              let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" =
+                "waiting";
 
+              // 🔥 FIX: Phân biệt trạng thái dựa vào trip status
               if (studentStatus === "da_don") {
-                displayStatus = "on-bus";
+                // Nếu trip đã hoàn thành → "Đã đến nơi"
+                if (
+                  tripStatus === "hoan_thanh" ||
+                  tripStatus === "da_hoan_thanh"
+                ) {
+                  displayStatus = "picked-up";
+                } else {
+                  // Trip đang chạy → "Đang trên xe"
+                  displayStatus = "on-bus";
+                }
               } else if (studentStatus === "da_tra") {
-                displayStatus = "picked-up";
+                displayStatus = "picked-up"; // Đã trả = Đã đến nơi
               } else if (studentStatus === "vang") {
-                displayStatus = "absent"; // 🔥 FIX: Phân biệt "vang" với "cho_don"
+                displayStatus = "absent";
               } else if (studentStatus === "cho_don") {
                 displayStatus = "waiting";
               }
@@ -397,14 +446,25 @@ export default function ParentDashboard() {
                 firstChild.trangThaiHocSinh ||
                 tripInfo.trangThaiHocSinh ||
                 "cho_don";
-              let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" = "waiting";
+              let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" =
+                "waiting";
 
+              // 🔥 FIX: Phân biệt trạng thái dựa vào trip status
               if (studentStatus === "da_don") {
-                displayStatus = "on-bus";
+                // Nếu trip đã hoàn thành → "Đã đến nơi"
+                if (
+                  tripStatus === "hoan_thanh" ||
+                  tripStatus === "da_hoan_thanh"
+                ) {
+                  displayStatus = "picked-up";
+                } else {
+                  // Trip đang chạy → "Đang trên xe"
+                  displayStatus = "on-bus";
+                }
               } else if (studentStatus === "da_tra") {
-                displayStatus = "picked-up";
+                displayStatus = "picked-up"; // Đã trả = Đã đến nơi
               } else if (studentStatus === "vang") {
-                displayStatus = "absent"; // 🔥 FIX: Phân biệt "vang" với "cho_don"
+                displayStatus = "absent";
               } else if (studentStatus === "cho_don") {
                 displayStatus = "waiting";
               }
@@ -490,15 +550,119 @@ export default function ParentDashboard() {
     };
   }, [toast]);
 
+  // 🔥 NEW: Listen for trip_status_update to update current stop index
+  useEffect(() => {
+    const handleTripStatusUpdate = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const data = customEvent.detail;
+      console.log("[Parent] trip_status_update received:", data);
+
+      // Update trip status
+      if (data.trangThai || data.status) {
+        const status = data.trangThai || data.status;
+        setTripStatus(status);
+        console.log("[Parent] Updated tripStatus:", status);
+
+        // 🔥 NEW: Update morning/afternoon trip status based on trip type
+        const tripType = data.loaiChuyen || data.tripType;
+        if (tripType === "don_sang") {
+          setMorningTripStatus(status);
+          console.log("[Parent] Updated morningTripStatus:", status);
+        } else if (tripType === "tra_chieu") {
+          setAfternoonTripStatus(status);
+          console.log("[Parent] Updated afternoonTripStatus:", status);
+        }
+
+        // 🔥 FIX: Reload trip detail when trip starts to get driver info
+        if (status === "dang_chay" && data.maChuyen) {
+          try {
+            console.log(
+              "[Parent] Trip started, reloading trip detail for driver info..."
+            );
+            const tripDetailRes = await apiClient.getTripById(data.maChuyen);
+            const tripDetail: any =
+              (tripDetailRes as any)?.data || tripDetailRes;
+
+            // Update driver info
+            let driverName = "Chưa phân công";
+            let driverPhone = "—";
+
+            if (tripDetail?.driverInfo) {
+              const driver = tripDetail.driverInfo;
+              driverName = driver.hoTen || driver.tenTaiXe || driverName;
+              driverPhone = driver.soDienThoai || driverPhone;
+              console.log(
+                "[Parent] ✅ Updated driver info from trip_status_update:",
+                {
+                  driverName,
+                  driverPhone,
+                }
+              );
+            } else if (tripDetail?.driver || tripDetail?.taiXe) {
+              const driver = tripDetail.driver || tripDetail.taiXe;
+              driverName = driver.hoTen || driver.name || driverName;
+              driverPhone = driver.soDienThoai || driver.phone || driverPhone;
+            }
+
+            // Update childInfo with new driver info
+            setChildInfo((prev) => {
+              if (!prev) return prev; // Skip if childInfo not initialized yet
+              return {
+                ...prev,
+                driverName,
+                driverPhone,
+              };
+            });
+          } catch (error) {
+            console.error("[Parent] Failed to reload trip detail:", error);
+          }
+        }
+      }
+
+      // Update current stop index if provided
+      if (typeof data.currentStop === "number") {
+        setCurrentStopIndex(data.currentStop);
+        console.log("[Parent] Updated currentStopIndex:", data.currentStop);
+      } else if (typeof data.diemHienTai === "number") {
+        setCurrentStopIndex(data.diemHienTai);
+        console.log(
+          "[Parent] Updated currentStopIndex from diemHienTai:",
+          data.diemHienTai
+        );
+      }
+    };
+
+    window.addEventListener("tripStatusUpdate", handleTripStatusUpdate);
+
+    return () => {
+      window.removeEventListener("tripStatusUpdate", handleTripStatusUpdate);
+    };
+  }, []);
+
   // M5: Listen for trip_completed
   useEffect(() => {
-    const handleTripCompleted = (event: CustomEvent) => {
-      const data = event.detail;
+    const handleTripCompleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const data = customEvent.detail;
       console.log("[Parent M5] trip_completed received:", data);
+
+      // 🔥 FIX: Set trip status to completed to stop bus position tracking
+      setTripStatus("hoan_thanh");
+      console.log("[Parent] Trip completed, setting tripStatus to hoan_thanh");
+
+      // 🔥 NEW: Update morning/afternoon trip status based on trip type
+      const tripType = data.loaiChuyen || data.tripType;
+      if (tripType === "don_sang") {
+        setMorningTripStatus("hoan_thanh");
+        console.log("[Parent] Morning trip completed");
+      } else if (tripType === "tra_chieu") {
+        setAfternoonTripStatus("hoan_thanh");
+        console.log("[Parent] Afternoon trip completed");
+      }
 
       // 🔥 FIX: Không tự tạo notification nữa, chỉ reload từ DB để tránh duplicate
       // Notification sẽ được hiển thị từ DB qua notification:new event hoặc khi reload
-      
+
       // Reload child info để cập nhật trạng thái "Đã đến nơi"
       apiClient
         .getStudentsByParent()
@@ -516,14 +680,24 @@ export default function ParentDashboard() {
               firstChild.trangThaiHocSinh ||
               tripInfo.trangThaiHocSinh ||
               "cho_don";
-            let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" = "waiting";
+            let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" =
+              "waiting";
 
             if (studentStatus === "da_don") {
-              displayStatus = "on-bus";
+              // Nếu trip đã hoàn thành → "Đã đến nơi"
+              if (
+                tripStatus === "hoan_thanh" ||
+                tripStatus === "da_hoan_thanh"
+              ) {
+                displayStatus = "picked-up";
+              } else {
+                // Trip đang chạy → "Đang trên xe"
+                displayStatus = "on-bus";
+              }
             } else if (studentStatus === "da_tra") {
-              displayStatus = "picked-up"; // 🔥 FIX: Hiển thị "Đã đến nơi"
+              displayStatus = "picked-up"; // Đã trả = Đã đến nơi
             } else if (studentStatus === "vang") {
-              displayStatus = "absent"; // 🔥 FIX: Phân biệt "vang" với "cho_don"
+              displayStatus = "absent";
             } else if (studentStatus === "cho_don") {
               displayStatus = "waiting";
             }
@@ -546,7 +720,10 @@ export default function ParentDashboard() {
           }
         })
         .catch((e) => {
-          console.warn("[Parent M5] Failed to reload child info after trip_completed:", e);
+          console.warn(
+            "[Parent M5] Failed to reload child info after trip_completed:",
+            e
+          );
         });
 
       // Reload notifications từ DB
@@ -571,20 +748,114 @@ export default function ParentDashboard() {
         });
     };
 
-    window.addEventListener(
-      "tripCompleted",
-      handleTripCompleted as EventListener
-    );
+    window.addEventListener("tripCompleted", handleTripCompleted);
 
     return () => {
-      window.removeEventListener(
-        "tripCompleted",
-        handleTripCompleted as EventListener
-      );
+      window.removeEventListener("tripCompleted", handleTripCompleted);
     };
   }, [toast, busInfo, delayAlert]);
 
   // Note: Removed initial fetching of students/routes to avoid 401/404 when not needed.
+
+  // 🔥 NEW: Fetch dynamic directions from bus position to next stop
+  useEffect(() => {
+    console.log("[Parent] Dynamic directions useEffect triggered:", {
+      hasBusLocation: !!busLocation,
+      busLocation,
+      stopsCount: stops?.length || 0,
+      currentStopIndex,
+    });
+
+    // Need bus location and at least one remaining stop
+    if (!busLocation || !stops || stops.length === 0) {
+      console.log("[Parent] Skipping dynamic directions - missing data");
+      return;
+    }
+
+    // Get remaining stops (from current stop onwards)
+    const remainingStops = stops.slice(currentStopIndex);
+    if (remainingStops.length === 0) {
+      console.log("[Parent] No remaining stops");
+      setDynamicDirections(null);
+      return;
+    }
+
+    // Validate bus coordinates
+    if (
+      !Number.isFinite(busLocation.lat) ||
+      !Number.isFinite(busLocation.lng)
+    ) {
+      return;
+    }
+
+    // Debounce: only fetch every 10s
+    const lastFetch = (window as any).__lastParentDirectionsFetch || 0;
+    const now = Date.now();
+    if (now - lastFetch < 10000) {
+      console.log("[Parent] Skipping - fetched recently");
+      return;
+    }
+    (window as any).__lastParentDirectionsFetch = now;
+
+    // Build waypoints: all stops except the last one
+    const waypoints = remainingStops
+      .slice(0, -1)
+      .map((stop) => {
+        const lat = Number(stop.lat);
+        const lng = Number(stop.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          console.warn("[Parent] Invalid waypoint coords:", stop);
+          return null;
+        }
+        return { location: `${lat},${lng}` };
+      })
+      .filter(Boolean) as Array<{ location: string }>;
+
+    const lastStop = remainingStops[remainingStops.length - 1];
+    const destinationLat = Number(lastStop.lat);
+    const destinationLng = Number(lastStop.lng);
+
+    if (!Number.isFinite(destinationLat) || !Number.isFinite(destinationLng)) {
+      console.warn("[Parent] Invalid destination coords");
+      return;
+    }
+
+    console.log(
+      `[Parent] 🗺️ Fetching dynamic route: Bus → ${waypoints.length} waypoint(s) → Destination`
+    );
+
+    // Fetch directions with waypoints
+    apiClient
+      .getDirections({
+        origin: `${busLocation.lat},${busLocation.lng}`,
+        destination: `${destinationLat},${destinationLng}`,
+        waypoints: waypoints,
+        mode: "driving",
+        vehicleType: "bus",
+      } as any) // Cast to any to allow cache buster
+      .then((response: any) => {
+        const polyline =
+          response?.data?.polyline ||
+          response?.polyline ||
+          response?.routes?.[0]?.overview_polyline?.points;
+        if (polyline && typeof polyline === "string") {
+          console.log(
+            `[Parent] ✅ Got dynamic directions: ${polyline.substring(
+              0,
+              50
+            )}...`
+          );
+          setDynamicDirections(polyline);
+        } else {
+          console.warn("[Parent] No polyline in directions response");
+          setDynamicDirections(null);
+        }
+      })
+      .catch((err: any) => {
+        console.warn("[Parent] Dynamic directions failed:", err);
+        setDynamicDirections(null);
+      });
+  }, [busLocation, currentStopIndex, stops]);
 
   // When route changes or student changes, load stops for that route
   useEffect(() => {
@@ -593,8 +864,13 @@ export default function ParentDashboard() {
         console.log("[Parent] loadStops skipped: No routeId");
         return;
       }
-      console.log("[Parent] loadStops calling API for route:", routeId, "trip:", selectedTripId);
-      
+      console.log(
+        "[Parent] loadStops calling API for route:",
+        routeId,
+        "trip:",
+        selectedTripId
+      );
+
       let polyline: string | null = null;
       let points: any[] = [];
 
@@ -605,7 +881,7 @@ export default function ParentDashboard() {
           // because the backend often returns a simplified straight-line polyline.
           // By leaving polyline as null, we force SSBMap to auto-fetch detailed
           // directions from Google Maps API based on the stops.
-          
+
           /* 
           const tripRes = await apiClient.getTripById(selectedTripId);
           const resBody: any = (tripRes as any).data || tripRes;
@@ -616,7 +892,9 @@ export default function ParentDashboard() {
              polyline = resBody.data.polyline;
           }
           */
-         console.log("[Parent] Skipped backend polyline to force Google Maps Directions");
+          console.log(
+            "[Parent] Skipped backend polyline to force Google Maps Directions"
+          );
         } catch (e) {
           console.warn("[Parent] Failed to fetch trip polyline:", e);
         }
@@ -626,21 +904,21 @@ export default function ParentDashboard() {
       try {
         const routeRes = await apiClient.getRouteById(routeId);
         const routeData: any = (routeRes as any).data || routeRes;
-        
+
         // If trip didn't provide polyline, use route polyline (might be less detailed)
         if (!polyline) {
           // Also skip route polyline fallback for the same reason
           // polyline = routeData?.polyline || routeData?.route?.polyline || null;
           console.log("[Parent] Skipped route polyline fallback");
         }
-        
-        console.log("[Parent] Final polyline to render:", { 
+
+        console.log("[Parent] Final polyline to render:", {
           hasPolyline: !!polyline,
-          length: (polyline as string | null)?.length || 0
+          length: (polyline as string | null)?.length || 0,
         });
 
         setRoutePolyline(polyline);
-        
+
         points = routeData?.diemDung || routeData?.route?.diemDung || [];
         const mapped = points.map((s: any) => ({
           id: (s.maDiem || s.id || `${s.viDo}_${s.kinhDo}`) + "",
@@ -653,7 +931,9 @@ export default function ParentDashboard() {
         mapped.sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0));
 
         setStops(
-          mapped.filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+          mapped.filter(
+            (p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng)
+          )
         );
       } catch (e) {
         console.warn("[Parent] loadStops failed", e);
@@ -734,7 +1014,8 @@ export default function ParentDashboard() {
             firstChild.trangThaiHocSinh ||
             tripInfo.trangThaiHocSinh ||
             "cho_don";
-          let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" = "waiting";
+          let displayStatus: "waiting" | "on-bus" | "picked-up" | "absent" =
+            "waiting";
 
           if (studentStatus === "da_don") {
             displayStatus = "on-bus"; // Học sinh đã lên xe
@@ -778,18 +1059,131 @@ export default function ParentDashboard() {
 
           // Load trip details if trip ID is available
           let dropoffTime = "16:30"; // Default fallback
+          let driverName = tripInfo.tenTaiXe || "Chưa phân công"; // Default from schedule
+          let driverPhone = tripInfo.sdtTaiXe || "—"; // Default from schedule
+
+          // 🔥 FIX: Load both morning and afternoon trip statuses
+          // 🔥 FIX: Lấy trip status trực tiếp từ schedule thay vì query API
+          // Vì schedule đã có đầy đủ thông tin về các chuyến đi của học sinh
+          try {
+            // Set trip status từ schedule hiện tại
+            if (tripInfo.trangThai && tripInfo.loaiChuyen) {
+              console.log(
+                `[Parent] ✅ Setting trip status from schedule: ${tripInfo.loaiChuyen} = ${tripInfo.trangThai}`
+              );
+
+              if (tripInfo.loaiChuyen === "don_sang") {
+                setMorningTripStatus(tripInfo.trangThai);
+              } else if (tripInfo.loaiChuyen === "tra_chieu") {
+                setAfternoonTripStatus(tripInfo.trangThai);
+              }
+            }
+
+            // Nếu có 2 chuyến (sáng + chiều), cần load chuyến còn lại
+            if (tripInfo.maChuyen) {
+              try {
+                const today = new Date().toISOString().split("T")[0];
+                const tripsRes = await apiClient.getTrips({ ngayChay: today });
+                const allTrips = Array.isArray((tripsRes as any)?.data)
+                  ? (tripsRes as any).data
+                  : [];
+
+                console.log(
+                  `[Parent] Checking ${allTrips.length} trips for other trip type`
+                );
+
+                // Tìm chuyến đi còn lại (nếu schedule là sáng thì tìm chiều, và ngược lại)
+                for (const trip of allTrips) {
+                  const tripType = trip.schedule?.loaiChuyen || trip.loaiChuyen;
+                  const status = trip.trangThai || trip.status;
+
+                  // Chỉ set trip type khác với trip hiện tại
+                  if (
+                    tripType === "don_sang" &&
+                    tripInfo.loaiChuyen !== "don_sang"
+                  ) {
+                    setMorningTripStatus(status);
+                    console.log(
+                      `[Parent] ✅ Set morning trip status: ${status}`
+                    );
+                  } else if (
+                    tripType === "tra_chieu" &&
+                    tripInfo.loaiChuyen !== "tra_chieu"
+                  ) {
+                    setAfternoonTripStatus(status);
+                    console.log(
+                      `[Parent] ✅ Set afternoon trip status: ${status}`
+                    );
+                  }
+                }
+              } catch (err) {
+                console.warn(
+                  "[Parent] Failed to load trips for other type:",
+                  err
+                );
+              }
+            }
+          } catch (err) {
+            console.warn("[Parent] Failed to load trip statuses:", err);
+          }
+
           if (tripInfo.maChuyen) {
             try {
-              const tripDetailRes = await apiClient.getTripById(tripInfo.maChuyen);
-              const tripDetail: any = (tripDetailRes as any)?.data || tripDetailRes;
-              
+              const tripDetailRes = await apiClient.getTripById(
+                tripInfo.maChuyen
+              );
+              const tripDetail: any =
+                (tripDetailRes as any)?.data || tripDetailRes;
+
+              // 🔥 FIX: Update trip status from trip detail (override schedule status)
+              if (tripDetail?.trangThai || tripDetail?.status) {
+                const status = tripDetail.trangThai || tripDetail.status;
+                setTripStatus(status);
+                console.log("[Parent] Set tripStatus from trip:", status);
+
+                // 🔥 FIX: Override morning/afternoon status from schedule with actual trip status
+                const tripType =
+                  tripDetail?.schedule?.loaiChuyen || tripInfo.loaiChuyen;
+                if (tripType === "don_sang") {
+                  setMorningTripStatus(status);
+                  console.log(
+                    "[Parent] ✅ Override morningTripStatus from trip detail:",
+                    status
+                  );
+                } else if (tripType === "tra_chieu") {
+                  setAfternoonTripStatus(status);
+                  console.log(
+                    "[Parent] ✅ Override afternoonTripStatus from trip detail:",
+                    status
+                  );
+                }
+              }
+
+              // 🔥 NEW: Update current stop index from trip data
+              if (typeof tripDetail?.currentStop === "number") {
+                setCurrentStopIndex(tripDetail.currentStop);
+                console.log(
+                  "[Parent] Set currentStopIndex from trip:",
+                  tripDetail.currentStop
+                );
+              } else if (typeof tripDetail?.diemHienTai === "number") {
+                setCurrentStopIndex(tripDetail.diemHienTai);
+                console.log(
+                  "[Parent] Set currentStopIndex from diemHienTai:",
+                  tripDetail.diemHienTai
+                );
+              }
+
               // Fallback: Set route ID from trip detail if not already set
               if (tripDetail?.maTuyen || tripDetail?.routeId) {
                 const rid = Number(tripDetail.maTuyen || tripDetail.routeId);
                 if (Number.isFinite(rid)) {
                   setSelectedRouteId((prev) => {
                     if (!prev) {
-                      console.log("[Parent] Set selectedRouteId from tripDetail:", rid);
+                      console.log(
+                        "[Parent] Set selectedRouteId from tripDetail:",
+                        rid
+                      );
                       return rid;
                     }
                     return prev;
@@ -801,9 +1195,53 @@ export default function ParentDashboard() {
               if (tripDetail?.schedule?.gioKhoiHanh) {
                 const pickupTime = tripDetail.schedule.gioKhoiHanh;
                 // Estimate dropoff time (add 1-2 hours for return trip)
-                const [hours, minutes] = pickupTime.split(':').map(Number);
-                const dropoffHours = (hours + (tripDetail.schedule.loaiChuyen === 'don_sang' ? 2 : 1)) % 24;
-                dropoffTime = `${String(dropoffHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                const [hours, minutes] = pickupTime.split(":").map(Number);
+                const dropoffHours =
+                  (hours +
+                    (tripDetail.schedule.loaiChuyen === "don_sang" ? 2 : 1)) %
+                  24;
+                dropoffTime = `${String(dropoffHours).padStart(
+                  2,
+                  "0"
+                )}:${String(minutes).padStart(2, "0")}`;
+              }
+
+              // 🔥 FIX: Lấy thông tin tài xế từ tripDetail (khi trip đã bắt đầu)
+              // Backend trả về driverInfo object với hoTen và soDienThoai
+              if (tripDetail?.driverInfo) {
+                const driver = tripDetail.driverInfo;
+                driverName = driver.hoTen || driver.tenTaiXe || driverName;
+                driverPhone = driver.soDienThoai || driverPhone;
+                console.log(
+                  "[Parent] ✅ Updated driver info from driverInfo:",
+                  {
+                    driverName,
+                    driverPhone,
+                  }
+                );
+              } else if (tripDetail?.driver || tripDetail?.taiXe) {
+                // Fallback 1: driver/taiXe object
+                const driver = tripDetail.driver || tripDetail.taiXe;
+                driverName = driver.hoTen || driver.name || driverName;
+                driverPhone = driver.soDienThoai || driver.phone || driverPhone;
+                console.log(
+                  "[Parent] ✅ Updated driver info from driver/taiXe:",
+                  {
+                    driverName,
+                    driverPhone,
+                  }
+                );
+              } else if (tripDetail?.tenTaiXe) {
+                // Fallback 2: Lấy từ field trực tiếp
+                driverName = tripDetail.tenTaiXe;
+                driverPhone = tripDetail.sdtTaiXe || driverPhone;
+                console.log(
+                  "[Parent] ✅ Updated driver info from trip fields:",
+                  {
+                    driverName,
+                    driverPhone,
+                  }
+                );
               }
             } catch (e) {
               console.warn("[Parent] Failed to load trip details:", e);
@@ -815,8 +1253,8 @@ export default function ParentDashboard() {
             grade: firstChild.lop || "Chưa có lớp",
             status: displayStatus,
             busNumber: tripInfo.bienSoXe || busInfo?.plateNumber || "—",
-            driverName: tripInfo.tenTaiXe || "Chưa phân công",
-            driverPhone: tripInfo.sdtTaiXe || "—",
+            driverName: driverName, // 🔥 FIX: Dùng biến đã load từ trip
+            driverPhone: driverPhone, // 🔥 FIX: Dùng biến đã load từ trip
             pickupTime: schedule.slice(0, 5) || "07:15",
             dropoffTime: dropoffTime,
             currentStop: "Điểm đón",
@@ -998,7 +1436,7 @@ export default function ParentDashboard() {
                         variant="default"
                         className="bg-green-500/20 text-green-700 hover:bg-green-500/30"
                       >
-                        Đã đón
+                        Đã đến nơi
                       </Badge>
                     </>
                   )}
@@ -1129,8 +1567,8 @@ export default function ParentDashboard() {
                             {
                               routeId: selectedRouteId,
                               routeName: busInfo?.route || "Tuyến đường",
-                              polyline: routePolyline,
-                              color: "#3b82f6", // Blue color
+                              polyline: dynamicDirections || routePolyline, // 🔥 Use dynamic directions if available
+                              color: dynamicDirections ? "#10b981" : "#3b82f6", // Green for dynamic, blue for static
                             },
                           ]
                         : []
@@ -1174,9 +1612,33 @@ export default function ParentDashboard() {
                       <Clock className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        Đón sáng
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-foreground">
+                          Đón sáng
+                        </p>
+                        {morningTripStatus === "hoan_thanh" ||
+                        morningTripStatus === "da_hoan_thanh" ? (
+                          <Badge
+                            variant="default"
+                            className="bg-green-500/20 text-green-700 text-xs"
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Đã hoàn thành
+                          </Badge>
+                        ) : morningTripStatus === "dang_chay" ? (
+                          <Badge
+                            variant="default"
+                            className="bg-blue-500/20 text-blue-700 text-xs"
+                          >
+                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse mr-1" />
+                            Đang chạy
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            Chưa bắt đầu
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {displayChildInfo.pickupTime} - Điểm đón
                       </p>
@@ -1191,9 +1653,33 @@ export default function ParentDashboard() {
                       <Clock className="w-5 h-5 text-orange-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        Trả chiều
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-foreground">
+                          Trả chiều
+                        </p>
+                        {afternoonTripStatus === "hoan_thanh" ||
+                        afternoonTripStatus === "da_hoan_thanh" ? (
+                          <Badge
+                            variant="default"
+                            className="bg-green-500/20 text-green-700 text-xs"
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Đã hoàn thành
+                          </Badge>
+                        ) : afternoonTripStatus === "dang_chay" ? (
+                          <Badge
+                            variant="default"
+                            className="bg-blue-500/20 text-blue-700 text-xs"
+                          >
+                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse mr-1" />
+                            Đang chạy
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            Chưa bắt đầu
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {displayChildInfo.dropoffTime} - Điểm trả
                       </p>
@@ -1242,7 +1728,10 @@ export default function ParentDashboard() {
                 <CardTitle className="text-base flex items-center justify-between">
                   <span>Thông báo gần đây</span>
                   {unreadCount > 0 && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge
+                      variant="destructive"
+                      className="text-sm font-bold animate-pulse"
+                    >
                       {unreadCount} mới
                     </Badge>
                   )}
@@ -1264,7 +1753,10 @@ export default function ParentDashboard() {
                           : MapPin;
                       return (
                         <div
-                          key={notification.id || `${notification.timestamp}-${index}`}
+                          key={
+                            notification.id ||
+                            `${notification.timestamp}-${index}`
+                          }
                           className={`flex items-start gap-4 p-4 rounded-lg transition-all cursor-pointer border-2 ${
                             notification.type === "warning"
                               ? "bg-orange-50 dark:bg-orange-950/20 border-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30"
