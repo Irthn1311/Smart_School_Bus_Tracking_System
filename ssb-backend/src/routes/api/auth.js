@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import AuthController from "../../controllers/AuthController.ts";
+import AuthController from "../../controllers/AuthController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 
 const router = express.Router();
