@@ -140,10 +140,10 @@ const ChuyenDiModel = {
         DATE(cd.ngayChay) as date,
         COUNT(cd.maChuyen) AS total,
         SUM(CASE 
-          WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe <= lt.gioKhoiHanh THEN 1 ELSE 0 
+          WHEN cd.gioBatDauThucTe IS NOT NULL AND cd.gioBatDauThucTe <= lt.gioKhoiHanh THEN 1 ELSE 0 
         END) AS onTime,
         SUM(CASE 
-          WHEN cd.trangThai = 'hoan_thanh' AND cd.gioBatDauThucTe > lt.gioKhoiHanh THEN 1 ELSE 0 
+          WHEN cd.gioBatDauThucTe IS NOT NULL AND cd.gioBatDauThucTe > lt.gioKhoiHanh THEN 1 ELSE 0 
         END) AS late
       FROM ChuyenDi cd
       JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh

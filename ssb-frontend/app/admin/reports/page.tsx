@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   BarChart3,
   TrendingUp,
@@ -21,6 +22,8 @@ import {
   Bus,
   Clock,
   AlertTriangle,
+  FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react"
 import {
   LineChart,
@@ -128,6 +131,8 @@ export default function ReportsPage() {
       try {
         setTableLoading(true)
         const res = await apiClient.getReportView({ type: reportType, from, to })
+        console.log('📊 Report API Response:', res)
+        console.log('📊 Report Data:', (res as any)?.data)
         if (mounted) setReportData((res as any)?.data || null)
       } catch (e: any) {
         if (mounted) setReportData(null)
@@ -195,11 +200,12 @@ export default function ReportsPage() {
     }
 
     const sliced = rows.slice(0, 10)
+    
     return (
       <Card className="border-border/50">
         <CardHeader>
           <CardTitle>
-            Dữ liệu (top {sliced.length}{rows.length > 10 ? ` / ${rows.length}` : ""})
+            Dữ liệu
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -220,9 +226,42 @@ export default function ReportsPage() {
                 <tbody>
                   {sliced.map((r, idx) => (
                     <tr key={idx} className="border-t border-border/50">
-                      {columns.map((c) => (
-                        <td key={c.key} className="py-2 pr-4 whitespace-nowrap max-w-[260px] truncate" title={String((r as any)[c.key] ?? "")}> {String((r as any)[c.key] ?? "")} </td>
-                      ))}
+                      {columns.map((c) => {
+                        let value = String((r as any)[c.key] ?? "")
+                        
+                        // Format ngày chạy thành DD/MM/YYYY
+                        if (c.key === 'ngayChay' && value) {
+                          try {
+                            const d = new Date(value)
+                            if (!isNaN(d.getTime())) {
+                              const day = String(d.getDate()).padStart(2, '0')
+                              const month = String(d.getMonth() + 1).padStart(2, '0')
+                              const year = d.getFullYear()
+                              value = `${day}/${month}/${year}`
+                            }
+                          } catch (e) {
+                            // Giữ nguyên value nếu parse lỗi
+                          }
+                        }
+                        
+                        // Format trạng thái chuyến đi
+                        if (c.key === 'trangThai' && type === 'trips') {
+                          const statusMap: Record<string, string> = {
+                            'chua_bat_dau': 'Chưa bắt đầu',
+                            'dang_chay': 'Đang chạy',
+                            'hoan_thanh': 'Hoàn thành',
+                            'huy': 'Hủy',
+                            'tre': 'Trễ',
+                          }
+                          value = statusMap[value] || value
+                        }
+                        
+                        return (
+                          <td key={c.key} className="py-2 pr-4 whitespace-nowrap max-w-[260px] truncate" title={value}>
+                            {value}
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -337,12 +376,16 @@ export default function ReportsPage() {
         const res = await apiClient.getReportView({ type: 'students', from, to })
         const d: any = (res as any)?.data || {}
         const attendance = d.attendance || {}
+        const students = Array.isArray(d.students) ? d.students : []
         
         if (mounted) {
           setAttendanceData([
             { name: 'Có mặt', value: Number(attendance.present || 0), color: '#10b981' },
             { name: 'Vắng mặt', value: Number(attendance.absent || 0), color: '#ef4444' },
           ])
+          
+          // Cập nhật reportData với danh sách học sinh có mặt
+          setReportData({ students })
         }
       } catch (e) {
         console.warn('Failed to load student attendance data', e)
@@ -381,149 +424,86 @@ export default function ReportsPage() {
                 <SelectItem value="custom">Custom</SelectItem>
               </SelectContent>
             </Select>
-            <Button 
-              className="gap-2"
-              onClick={async () => {
-                try {
-                  const blob = await apiClient.exportReport({ format: "xlsx", type: reportType, from, to })
-                  const url = window.URL.createObjectURL(blob)
-                  const a = document.createElement("a")
-                  a.href = url
-                  a.download = `report_${reportType}_${from}_${to}.xlsx`
-                  document.body.appendChild(a)
-                  a.click()
-                  window.URL.revokeObjectURL(url)
-                  document.body.removeChild(a)
-                  toast({ title: t("common.success"), description: t("reports.exportReport") })
-                } catch (e) {
-                  toast({ title: t("common.error"), description: t("reports.exportReport"), variant: "destructive" })
-                }
-              }}
-            >
-              <Download className="w-4 h-4" />
-              {t("reports.exportReport")}
-            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="gap-2">
+                  <Download className="w-4 h-4" />
+                  {t("reports.exportReport")}
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const blob = await apiClient.exportReport({ format: "xlsx", type: reportType, from, to })
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `report_${reportType}_${from}_${to}.xlsx`
+                      document.body.appendChild(a)
+                      a.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(a)
+                      toast({ title: t("common.success"), description: "Đã xuất báo cáo Excel" })
+                    } catch (e) {
+                      toast({ title: t("common.error"), description: "Không thể xuất báo cáo", variant: "destructive" })
+                    }
+                  }}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Xuất Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const blob = await apiClient.exportReport({ format: "pdf", type: reportType, from, to })
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `report_${reportType}_${from}_${to}.pdf`
+                      document.body.appendChild(a)
+                      a.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(a)
+                      toast({ title: t("common.success"), description: "Đã xuất báo cáo PDF" })
+                    } catch (e) {
+                      toast({ title: t("common.error"), description: "Không thể xuất báo cáo", variant: "destructive" })
+                    }
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Xuất PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
-
-        {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.totalTrips")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.totalTrips}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+12%</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Bus className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.onTimeRate")}</p>
-                  <p className="text-2xl font-bold text-green-500 mt-1">{uiStats.onTimeRate}%</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+3%</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.students")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.totalStudents}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">+5</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.avgDelay")}</p>
-                  <p className="text-2xl font-bold text-orange-500 mt-1">{uiStats.avgDelay}m</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingDown className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">-0.5m</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-orange-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t("reports.incidents")}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.incidents}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingDown className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-green-500">-8</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Xe hoạt động</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{uiStats.activeBuses}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-xs text-muted-foreground">Tổng: 5</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Bus className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Detailed Reports */}
         <Tabs value={activeTab} className="space-y-6" onValueChange={(v) => setActiveTab(v)}>
-          <TabsList className="grid w-full max-w-3xl grid-cols-5">
-            <TabsTrigger value="trips">Chuyến đi</TabsTrigger>
-            <TabsTrigger value="buses">Xe buýt</TabsTrigger>
-            <TabsTrigger value="drivers">Tài xế</TabsTrigger>
-            <TabsTrigger value="students">Học sinh</TabsTrigger>
-            <TabsTrigger value="incidents">Sự cố</TabsTrigger>
+          <TabsList className="grid w-full max-w-3xl grid-cols-5 p-1 bg-muted/50 shadow-md">
+            <TabsTrigger value="trips" className="gap-2">
+              <Bus className="w-4 h-4" />
+              Chuyến đi
+            </TabsTrigger>
+            <TabsTrigger value="buses" className="gap-2">
+              <Bus className="w-4 h-4" />
+              Xe buýt
+            </TabsTrigger>
+            <TabsTrigger value="drivers" className="gap-2">
+              <Users className="w-4 h-4" />
+              Tài xế
+            </TabsTrigger>
+            <TabsTrigger value="students" className="gap-2">
+              <Users className="w-4 h-4" />
+              Học sinh
+            </TabsTrigger>
+            <TabsTrigger value="incidents" className="gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Sự cố
+            </TabsTrigger>
           </TabsList>
 
           {/* Trips Report */}
@@ -623,7 +603,6 @@ export default function ReportsPage() {
 
           {/* Buses Report */}
           <TabsContent value="buses" className="space-y-6">
-            {renderReportTable()}
             <div className="grid grid-cols-1 gap-6">
               <Card className="border-border/50">
                 <CardHeader>

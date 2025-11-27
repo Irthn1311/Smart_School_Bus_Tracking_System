@@ -1,4 +1,5 @@
 // @ts-nocheck
+// Updated: 2025-11-28 - Added presentStudents/absentStudents separation
 import Joi from "joi";
 import PDFDocument from "pdfkit";
 import fs from "fs";
@@ -9,6 +10,18 @@ import pool from "../config/db.js";
 
 const REPORT_TYPES = ["overview", "trips", "buses", "drivers", "students", "incidents"];
 const FORMATS = ["csv", "excel", "xlsx", "pdf"];
+
+// Mapping trạng thái chuyến đi
+function formatTrangThaiChuyen(status) {
+  const mapping = {
+    'chua_bat_dau': 'Chưa bắt đầu',
+    'dang_chay': 'Đang chạy',
+    'hoan_thanh': 'Hoàn thành',
+    'huy': 'Hủy',
+    'tre': 'Trễ',
+  };
+  return mapping[status] || status;
+}
 
 function validateParams(query) {
   const schema = Joi.object({
@@ -171,7 +184,25 @@ async function buildDataByType(type, dateFrom, dateTo) {
       return { drivers, driverPerformance };
     }
     case "students": {
-      const students = await HocSinhModel.getWithParentInfo();
+      // Lấy danh sách học sinh có mặt trong khoảng thời gian
+      const studentsQuery = `
+        SELECT DISTINCT
+          hs.maHocSinh,
+          hs.hoTen,
+          hs.lop,
+          nd.soDienThoai as sdtPhuHuynh,
+          nd.hoTen as tenPhuHuynh
+        FROM HocSinh hs
+        INNER JOIN TrangThaiHocSinh tths ON hs.maHocSinh = tths.maHocSinh
+        INNER JOIN ChuyenDi cd ON tths.maChuyen = cd.maChuyen
+        LEFT JOIN NguoiDung nd ON hs.maPhuHuynh = nd.maNguoiDung
+        WHERE DATE(cd.ngayChay) >= DATE(?) 
+          AND DATE(cd.ngayChay) <= DATE(?)
+          AND tths.trangThai IN ('da_don', 'da_tra')
+        ORDER BY hs.lop, hs.hoTen
+      `;
+      
+      const [students] = await pool.query(studentsQuery, [dateFrom, dateTo]);
       
       // Tính toán attendance dựa trên TrangThaiHocSinh
       const attendanceQuery = `
@@ -319,14 +350,26 @@ class ReportsController {
             return;
           }
           if (type === "students") {
-            sheet.columns = [
+            // Tạo 2 sheets: một cho học sinh có mặt, một cho học sinh vắng mặt
+            const presentSheet = wb.addWorksheet("Học sinh có mặt");
+            const absentSheet = wb.addWorksheet("Học sinh vắng mặt");
+            
+            const columns = [
               { header: "Mã học sinh", key: "maHocSinh", width: 12 },
               { header: "Họ tên", key: "hoTen", width: 22 },
               { header: "Lớp", key: "lop", width: 8 },
               { header: "Phụ huynh", key: "tenPhuHuynh", width: 20 },
               { header: "SĐT PH", key: "sdtPhuHuynh", width: 14 },
             ];
-            (data.students || []).forEach((r) => sheet.addRow(r));
+            
+            presentSheet.columns = columns;
+            (data.presentStudents || []).forEach((r) => presentSheet.addRow(r));
+            
+            absentSheet.columns = columns;
+            (data.absentStudents || []).forEach((r) => absentSheet.addRow(r));
+            
+            // Xóa sheet mặc định
+            wb.removeWorksheet(sheet.id);
             return;
           }
           if (type === "incidents") {
@@ -553,7 +596,22 @@ class ReportsController {
             { header: 'Phụ huynh', key: 'tenPhuHuynh' },
             { header: 'SĐT PH', key: 'sdtPhuHuynh' },
           ];
-          drawTable(columns, data?.students || []);
+          
+          // Vẽ bảng học sinh có mặt
+          if (hasVNBold) doc.font('vn-bold');
+          doc.fontSize(14).fillColor('#2563eb').text('Học sinh có mặt', { underline: true });
+          doc.moveDown(0.5);
+          if (hasVNRegular) doc.font('vn-regular');
+          drawTable(columns, data?.presentStudents || []);
+          
+          doc.moveDown(1.5);
+          
+          // Vẽ bảng học sinh vắng mặt
+          if (hasVNBold) doc.font('vn-bold');
+          doc.fontSize(14).fillColor('#dc2626').text('Học sinh vắng mặt', { underline: true });
+          doc.moveDown(0.5);
+          if (hasVNRegular) doc.font('vn-regular');
+          drawTable(columns, data?.absentStudents || []);
         } else if (type === 'incidents') {
           const columns = [
             { header: 'Mã sự cố', key: 'maSuCo' },
@@ -588,6 +646,15 @@ class ReportsController {
       const dateFrom = from || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const dateTo = to || new Date().toISOString().slice(0, 10);
       const data = await buildDataByType(type, dateFrom, dateTo);
+      
+      // DEBUG LOG
+      if (type === 'students') {
+        console.log('🔍 STUDENTS API DEBUG:');
+        console.log('  - Data keys:', Object.keys(data));
+        console.log('  - presentStudents:', data.presentStudents?.length || 0);
+        console.log('  - absentStudents:', data.absentStudents?.length || 0);
+      }
+      
       return res.status(200).json({ success: true, data, meta: { type, from: dateFrom, to: dateTo } });
     } catch (error) {
       console.error("ReportsController.view error:", error);
@@ -608,13 +675,27 @@ function convertToCSV(data, type) {
       if (data.trips && data.trips.length > 0) {
         headers.push("Mã chuyến", "Ngày chạy", "Tuyến đường", "Biển số xe", "Tài xế", "Trạng thái", "Giờ khởi hành", "Giờ bắt đầu thực tế");
         data.trips.forEach((trip) => {
+          // Format ngayChay thành DD/MM/YYYY
+          let formattedDate = trip.ngayChay || "";
+          if (trip.ngayChay) {
+            try {
+              const d = new Date(trip.ngayChay);
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              formattedDate = `${day}/${month}/${year}`;
+            } catch (e) {
+              formattedDate = trip.ngayChay;
+            }
+          }
+          
           rows.push([
             trip.maChuyen || "",
-            trip.ngayChay || "",
+            formattedDate,
             trip.tenTuyen || "",
             trip.bienSoXe || "",
             trip.tenTaiXe || "",
-            trip.trangThai || "",
+            formatTrangThaiChuyen(trip.trangThai || ""),
             trip.gioKhoiHanh || "",
             trip.gioBatDauThucTe || "",
           ]);
@@ -638,9 +719,29 @@ function convertToCSV(data, type) {
       break;
 
     case "students":
-      if (data.students && data.students.length > 0) {
-        headers.push("Mã học sinh", "Họ tên", "Lớp", "Phụ huynh", "SĐT phụ huynh");
-        data.students.forEach((student) => {
+      // Tạo 2 bảng: học sinh có mặt và vắng mặt
+      if (data.presentStudents && data.presentStudents.length > 0) {
+        headers.push("DANH SACH HOC SINH CO MAT");
+        rows.push(["Ma hoc sinh", "Ho ten", "Lop", "Phu huynh", "SDT phu huynh"]);
+        data.presentStudents.forEach((student) => {
+          rows.push([
+            student.maHocSinh || "",
+            student.hoTen || "",
+            student.lop || "",
+            student.tenPhuHuynh || "",
+            student.sdtPhuHuynh || "",
+          ]);
+        });
+      }
+      
+      // Thêm khoảng trống
+      rows.push([""]);
+      rows.push([""]);
+      
+      if (data.absentStudents && data.absentStudents.length > 0) {
+        rows.push(["DANH SACH HOC SINH VANG MAT"]);
+        rows.push(["Ma hoc sinh", "Ho ten", "Lop", "Phu huynh", "SDT phu huynh"]);
+        data.absentStudents.forEach((student) => {
           rows.push([
             student.maHocSinh || "",
             student.hoTen || "",
