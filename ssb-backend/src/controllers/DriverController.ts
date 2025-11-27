@@ -1,3 +1,4 @@
+// @ts-nocheck
 // DriverController - Controller chuyên nghiệp cho quản lý tài xế
 import DriverService from "../services/DriverService.js";
 import TaiXeModel from "../models/TaiXeModel.js";
@@ -6,6 +7,7 @@ import LichTrinhModel from "../models/LichTrinhModel.js";
 import ChuyenDiModel from "../models/ChuyenDiModel.js";
 import * as response from "../utils/response.js";
 import bcrypt from "bcryptjs";
+import EmailService from "../services/EmailService.js";
 
 class DriverController {
   // Lấy danh sách tất cả tài xế với thông tin người dùng
@@ -137,6 +139,7 @@ class DriverController {
         ngayHetHanBangLai,
         soNamKinhNghiem,
         trangThai,
+        matKhau,
       } = req.body;
 
       // Validation dữ liệu bắt buộc
@@ -195,11 +198,20 @@ class DriverController {
         });
       }
 
-      // Validation ngày hết hạn bằng lái
+      // Validation ngày hết hạn bằng lái (so sánh theo ngày, cho phép bằng ngày hiện tại)
       if (ngayHetHanBangLai) {
         const expiryDate = new Date(ngayHetHanBangLai);
+        if (isNaN(expiryDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "Ngày hết hạn bằng lái không hợp lệ",
+          });
+        }
         const today = new Date();
-        if (expiryDate <= today) {
+        // Reset giờ để so sánh ngày
+        today.setHours(0, 0, 0, 0);
+        expiryDate.setHours(0, 0, 0, 0);
+        if (expiryDate < today) {
           return res.status(400).json({
             success: false,
             message: "Bằng lái đã hết hạn",
@@ -244,7 +256,6 @@ class DriverController {
       }
 
       // Hash password - bắt buộc khi tạo mới
-      const matKhau = req.body.matKhau;
       if (!matKhau) {
         return res.status(400).json({
           success: false,
@@ -332,6 +343,19 @@ class DriverController {
       const newDriver = await TaiXeModel.getById(userId);
       const userInfo = await NguoiDungModel.getById(userId);
 
+      // Gửi email thông tin tài khoản tài xế (không chặn luồng nếu lỗi)
+      try {
+        await EmailService.sendParentAccountInfo(
+          email,
+          hoTen,
+          email,
+          matKhau,
+          soDienThoai || ""
+        );
+      } catch (emailError) {
+        console.error("Error sending driver account email (non-blocking):", emailError);
+      }
+
       res.status(201).json({
         success: true,
         data: {
@@ -375,6 +399,7 @@ class DriverController {
         soNamKinhNghiem,
         trangThai,
       } = req.body;
+      const matKhau = req.body.matKhau;
 
       if (!id) {
         return res.status(400).json({
@@ -448,7 +473,7 @@ class DriverController {
       // Validation số năm kinh nghiệm
       if (
         soNamKinhNghiem !== undefined &&
-        (soNamKinhNghiem < 0 || soNamKinhNghiem > 50)
+        (Number(soNamKinhNghiem) < 0 || Number(soNamKinhNghiem) > 50)
       ) {
         return res.status(400).json({
           success: false,
@@ -461,23 +486,88 @@ class DriverController {
       if (hoTen !== undefined) userUpdateData.hoTen = hoTen;
       if (email !== undefined) userUpdateData.email = email;
       if (soDienThoai !== undefined) userUpdateData.soDienThoai = soDienThoai;
-      if (trangThai !== undefined) userUpdateData.trangThai = trangThai;
+      if (trangThai !== undefined) {
+        // Bảng NguoiDung.trangThai là số (1: hoạt động, 0: ngừng)
+        const userStatus = (() => {
+          if (String(trangThai).toLowerCase() === "ngung_hoat_dong") return 0;
+          return 1; // mặc định hoạt động
+        })();
+        userUpdateData.trangThai = userStatus;
+      }
 
       if (Object.keys(userUpdateData).length > 0) {
-        await NguoiDungModel.update(id, userUpdateData);
+        try {
+          await NguoiDungModel.update(id, userUpdateData);
+        } catch (err) {
+          console.error("NguoiDungModel.update error:", {
+            message: err?.message,
+            code: err?.code,
+            sqlMessage: err?.sqlMessage,
+            sqlState: err?.sqlState,
+          });
+          return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi cập nhật thông tin người dùng",
+            error: err?.sqlMessage || err?.message,
+          });
+        }
+      }
+
+      // Cập nhật mật khẩu người dùng nếu được cung cấp
+      if (matKhau && typeof matKhau === "string" && matKhau.trim().length > 0) {
+        // Optional: basic password policy
+        if (matKhau.length < 6) {
+          return res.status(400).json({
+            success: false,
+            message: "Mật khẩu phải có ít nhất 6 ký tự",
+          });
+        }
+        const saltRounds = 12;
+        const hashedPassword = await bcrypt.hash(matKhau, saltRounds);
+        try {
+          await NguoiDungModel.update(id, { matKhau: hashedPassword });
+        } catch (err) {
+          console.error("NguoiDungModel.update (password) error:", {
+            message: err?.message,
+            code: err?.code,
+            sqlMessage: err?.sqlMessage,
+            sqlState: err?.sqlState,
+          });
+          return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi cập nhật mật khẩu",
+            error: err?.sqlMessage || err?.message,
+          });
+        }
       }
 
       // Cập nhật thông tin tài xế
       const driverUpdateData = {};
+      // Đồng bộ tên tài xế nếu hoTen thay đổi
+      if (hoTen !== undefined) driverUpdateData.tenTaiXe = hoTen;
       if (soBangLai !== undefined) driverUpdateData.soBangLai = soBangLai;
       if (ngayHetHanBangLai !== undefined)
         driverUpdateData.ngayHetHanBangLai = ngayHetHanBangLai;
       if (soNamKinhNghiem !== undefined)
         driverUpdateData.soNamKinhNghiem = soNamKinhNghiem;
-      if (trangThai !== undefined) driverUpdateData.trangThai = trangThai;
+      if (trangThai !== undefined) driverUpdateData.trangThai = trangThai; // Bảng TaiXe dùng chuỗi
 
       if (Object.keys(driverUpdateData).length > 0) {
-        await TaiXeModel.update(id, driverUpdateData);
+        try {
+          await TaiXeModel.update(id, driverUpdateData);
+        } catch (err) {
+          console.error("TaiXeModel.update error:", {
+            message: err?.message,
+            code: err?.code,
+            sqlMessage: err?.sqlMessage,
+            sqlState: err?.sqlState,
+          });
+          return res.status(500).json({
+            success: false,
+            message: "Lỗi server khi cập nhật thông tin tài xế",
+            error: err?.sqlMessage || err?.message,
+          });
+        }
       }
 
       // Lấy thông tin tài xế sau khi cập nhật

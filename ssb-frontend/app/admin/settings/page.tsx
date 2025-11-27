@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTheme } from "next-themes"
 import { useAuth } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -18,15 +20,46 @@ import { apiClient } from "@/lib/api"
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const { language, setLanguage, t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Appearance settings
+  const [mounted, setMounted] = useState(false)
+  const darkMode = theme === "dark"
+
+  // Notification settings
+  const [notifyDelay, setNotifyDelay] = useState(true)
+  const [notifyIncident, setNotifyIncident] = useState(true)
 
   // M8: System settings
   const [geofenceRadiusMeters, setGeofenceRadiusMeters] = useState(60)
   const [delayThresholdMinutes, setDelayThresholdMinutes] = useState(5)
   const [realtimeThrottleSeconds, setRealtimeThrottleSeconds] = useState(2)
   const [mapsProvider, setMapsProvider] = useState<"google" | "osm">("google")
+
+  // Handle hydration
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Load notification settings from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("admin_notification_settings")
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved)
+          setNotifyDelay(settings.notifyDelay ?? true)
+          setNotifyIncident(settings.notifyIncident ?? true)
+        } catch (e) {
+          console.error("Error loading notification settings:", e)
+        }
+      }
+    }
+  }, [])
 
   // Load settings
   useEffect(() => {
@@ -54,6 +87,27 @@ export default function SettingsPage() {
     return () => { mounted = false }
   }, [])
 
+  const handleSaveAppearance = () => {
+    // Theme and language are automatically saved via their contexts
+    toast({
+      title: t("settings.saveSuccess"),
+      description: t("settings.appearanceUpdated"),
+    })
+  }
+
+  const handleSaveNotifications = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("admin_notification_settings", JSON.stringify({
+        notifyDelay,
+        notifyIncident,
+      }))
+    }
+    toast({
+      title: t("settings.saveSuccess"),
+      description: t("settings.notificationsUpdated"),
+    })
+  }
+
   const handleSaveSystem = async () => {
     try {
       setSaving(true)
@@ -65,15 +119,15 @@ export default function SettingsPage() {
         mapsProvider,
       })
       toast({
-        title: "Lưu thành công",
-        description: "Cài đặt hệ thống đã được cập nhật và áp dụng",
+        title: t("settings.saveSuccess"),
+        description: t("settings.systemUpdated"),
       })
     } catch (e: any) {
       console.error(e)
       const errorMsg = e?.response?.data?.message || e?.message || "Lỗi khi cập nhật cài đặt"
       setError(errorMsg)
       toast({
-        title: "Lỗi",
+        title: t("settings.saveError"),
         description: errorMsg,
         variant: "destructive",
       })
@@ -82,53 +136,57 @@ export default function SettingsPage() {
     }
   }
 
+  if (!mounted) {
+    return null
+  }
+
   return (
     <DashboardLayout sidebar={<AdminSidebar />}>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Cài đặt hệ thống</h1>
+          <h1 className="text-3xl font-bold text-foreground">{t("settings.title")}</h1>
           <p className="text-muted-foreground mt-1">
-            Quản lý cài đặt tài khoản, giao diện, thông báo và hệ thống.
+            {t("settings.description")}
           </p>
         </div>
 
         <Separator />
 
-        <Tabs defaultValue="account" className="w-full">
+        <Tabs defaultValue="appearance" className="w-full">
           <TabsList className="mb-4">
-            
-            <TabsTrigger value="appearance">Giao diện</TabsTrigger>
-            <TabsTrigger value="notifications">Thông báo</TabsTrigger>
-            <TabsTrigger value="system">Hệ thống</TabsTrigger>
+            <TabsTrigger value="appearance">{t("settings.appearance")}</TabsTrigger>
+            <TabsTrigger value="notifications">{t("settings.notifications")}</TabsTrigger>
+            <TabsTrigger value="system">{t("settings.system")}</TabsTrigger>
           </TabsList>
-
-          
 
           {/* --- Giao diện --- */}
           <TabsContent value="appearance">
             <Card>
               <CardHeader>
-                <CardTitle>Tùy chỉnh giao diện</CardTitle>
+                <CardTitle>{t("settings.customizeAppearance")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <p>Chế độ tối</p>
-                  <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+                  <p>{t("settings.darkMode")}</p>
+                  <Switch 
+                    checked={darkMode} 
+                    onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} 
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Ngôn ngữ</label>
+                  <label className="block text-sm font-medium mb-1">{t("settings.language")}</label>
                   <select
                     className="border border-border rounded-md p-2 text-sm w-full bg-background"
                     value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
+                    onChange={(e) => setLanguage(e.target.value as "vi" | "en")}
                   >
-                    <option value="vi">Tiếng Việt</option>
-                    <option value="en">English</option>
+                    <option value="vi">{t("settings.vietnamese")}</option>
+                    <option value="en">{t("settings.english")}</option>
                   </select>
                 </div>
               </CardContent>
               <CardFooter>
-                <Button onClick={() => handleSave("giao diện")}>Lưu thay đổi</Button>
+                <Button onClick={handleSaveAppearance}>{t("settings.saveChanges")}</Button>
               </CardFooter>
             </Card>
           </TabsContent>
@@ -137,23 +195,20 @@ export default function SettingsPage() {
           <TabsContent value="notifications">
             <Card>
               <CardHeader>
-                <CardTitle>Cài đặt thông báo</CardTitle>
+                <CardTitle>{t("settings.notificationSettings")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-
                 <div className="flex items-center justify-between">
-                  <p>Thông báo khi xe trễ</p>
+                  <p>{t("settings.notifyDelay")}</p>
                   <Switch checked={notifyDelay} onCheckedChange={setNotifyDelay} />
                 </div>
-
                 <div className="flex items-center justify-between">
-                  <p>Thông báo khi có sự cố</p>
+                  <p>{t("settings.notifyIncident")}</p>
                   <Switch checked={notifyIncident} onCheckedChange={setNotifyIncident} />
                 </div>
-
               </CardContent>
               <CardFooter>
-                <Button onClick={() => handleSave("thông báo")}>Lưu thay đổi</Button>
+                <Button onClick={handleSaveNotifications}>{t("settings.saveChanges")}</Button>
               </CardFooter>
             </Card>
           </TabsContent>

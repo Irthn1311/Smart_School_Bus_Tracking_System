@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -69,6 +70,7 @@ type Schedule = {
 }
 
 export default function SchedulePage() {
+  const { t } = useLanguage()
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -735,21 +737,21 @@ export default function SchedulePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Quản lý Lịch trình</h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base">Phân công và theo dõi lịch trình xe buýt</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{t("schedule.title")}</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">{t("schedule.description")}</p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90">
                 <Plus className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Tạo lịch trình mới</span>
-                <span className="sm:hidden">Tạo mới</span>
+                <span className="hidden sm:inline">{t("schedule.addNew")}</span>
+                <span className="sm:hidden">{t("schedule.addNew")}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-xl sm:text-2xl">Tạo lịch trình mới</DialogTitle>
-                <DialogDescription className="text-sm sm:text-base">Phân công xe buýt và tài xế cho tuyến đường</DialogDescription>
+                <DialogTitle className="text-xl sm:text-2xl">{t("schedule.addNew")}</DialogTitle>
+                <DialogDescription className="text-sm sm:text-base">{t("schedule.description")}</DialogDescription>
               </DialogHeader>
               <ScheduleForm onClose={() => {
                 setIsAddDialogOpen(false)
@@ -765,7 +767,7 @@ export default function SchedulePage() {
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Tổng lịch trình</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{t("schedule.total")}</p>
                   <p className="text-xl sm:text-2xl font-bold">{stats.total}</p>
                 </div>
                 <RouteIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary opacity-20 flex-shrink-0" />
@@ -776,7 +778,7 @@ export default function SchedulePage() {
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Đang áp dụng</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{t("schedule.applied")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-success">{stats.active}</p>
                 </div>
                 <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-success opacity-20 flex-shrink-0" />
@@ -787,7 +789,7 @@ export default function SchedulePage() {
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Đón sáng</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{t("schedule.morningPickup")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-warning">{stats.morning}</p>
                 </div>
                 <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-warning opacity-20 flex-shrink-0" />
@@ -798,7 +800,7 @@ export default function SchedulePage() {
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Trả chiều</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{t("schedule.afternoonDropoff")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-primary">{stats.afternoon}</p>
                 </div>
                 <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary opacity-20 flex-shrink-0" />
@@ -809,7 +811,7 @@ export default function SchedulePage() {
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Hôm nay</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{t("schedule.today")}</p>
                   <p className="text-xl sm:text-2xl font-bold">{stats.today}</p>
                 </div>
                 <CalendarIcon className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground opacity-20 flex-shrink-0" />
@@ -826,7 +828,7 @@ export default function SchedulePage() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Tìm theo tuyến, xe, tài xế..."
+                  placeholder={t("schedule.search")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -841,20 +843,20 @@ export default function SchedulePage() {
                     <SelectValue placeholder="Loại chuyến" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    <SelectItem value="don_sang">Đón sáng</SelectItem>
-                    <SelectItem value="tra_chieu">Trả chiều</SelectItem>
+                    <SelectItem value="all">{t("schedule.all")}</SelectItem>
+                    <SelectItem value="don_sang">{t("schedule.morningPickup")}</SelectItem>
+                    <SelectItem value="tra_chieu">{t("schedule.afternoonDropoff")}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-full sm:w-[150px]">
-                    <SelectValue placeholder="Trạng thái" />
+                    <SelectValue placeholder={t("common.status")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    <SelectItem value="active">Đang áp dụng</SelectItem>
-                    <SelectItem value="inactive">Không áp dụng</SelectItem>
+                    <SelectItem value="all">{t("schedule.all")}</SelectItem>
+                    <SelectItem value="active">{t("schedule.applied")}</SelectItem>
+                    <SelectItem value="inactive">{t("common.inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -867,15 +869,15 @@ export default function SchedulePage() {
                       setSearchQuery('')
                     }}
                     className="w-full sm:w-auto"
-                    title="Xóa tất cả bộ lọc"
+                    title={t("common.filter")}
                   >
                     <Filter className="w-4 h-4 mr-2" />
-                    Xóa bộ lọc
+                    {t("common.filter")}
                   </Button>
                 )}
 
                 <Button variant="outline" onClick={fetchAllSchedules} className="w-full sm:w-auto">
-                  Tải lại
+                  {t("schedule.reload")}
                 </Button>
               </div>
             </div>
@@ -885,15 +887,15 @@ export default function SchedulePage() {
         {/* Main Content Tabs */}
         <Tabs defaultValue="table" className="space-y-4">
           <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="table" className="flex-1 sm:flex-none">Xem dạng bảng</TabsTrigger>
-            <TabsTrigger value="calendar" className="flex-1 sm:flex-none">Xem theo lịch</TabsTrigger>
+            <TabsTrigger value="table" className="flex-1 sm:flex-none">{t("schedule.viewTable")}</TabsTrigger>
+            <TabsTrigger value="calendar" className="flex-1 sm:flex-none">{t("schedule.viewCalendar")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="table" className="space-y-4">
             <Card className="border-border/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Danh sách lịch trình</CardTitle>
+                  <CardTitle>{t("schedule.list")}</CardTitle>
                   <div className="flex gap-2">
                     <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                       <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1026,7 +1028,7 @@ export default function SchedulePage() {
                                     ? 'border-warning text-warning' 
                                     : 'border-primary text-primary'
                                 }>
-                                  {schedule.tripType === 'don_sang' ? 'Đón sáng' : schedule.tripType === 'tra_chieu' ? 'Trả chiều' : '-'}
+                                  {schedule.tripType === 'don_sang' ? t("schedule.morningPickup") : schedule.tripType === 'tra_chieu' ? t("schedule.afternoonDropoff") : '-'}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -1043,7 +1045,7 @@ export default function SchedulePage() {
                               </TableCell>
                               <TableCell>
                                 <Badge variant={schedule.status === 'active' ? 'default' : 'secondary'}>
-                                  {schedule.status === 'active' ? 'Đang áp dụng' : 'Không áp dụng'}
+                                  {schedule.status === 'active' ? t("schedule.applied") : t("common.inactive")}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
@@ -1220,7 +1222,7 @@ export default function SchedulePage() {
                     {error && <div className="py-8 text-center text-destructive">{error}</div>}
                     {!loading && !error && todaysSchedules.length === 0 && (
                       <div className="py-8 text-center text-muted-foreground">
-                        Không có lịch trình nào trong ngày này
+                        {t("schedule.noSchedules")}
                       </div>
                     )}
                     {!loading && !error && todaysSchedules.map((schedule) => (
@@ -1241,7 +1243,7 @@ export default function SchedulePage() {
                                 ? 'border-warning text-warning' 
                                 : 'border-primary text-primary'
                             }>
-                              {schedule.tripType === 'don_sang' ? 'Đón sáng' : 'Trả chiều'}
+                              {schedule.tripType === 'don_sang' ? t("schedule.morningPickup") : t("schedule.afternoonDropoff")}
                             </Badge>
                           </div>
 

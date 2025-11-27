@@ -50,6 +50,7 @@ export default function ParentDashboard() {
   const [stops, setStops] = useState<
     { id: string; lat: number; lng: number; label?: string }[]
   >([]);
+  const [routePolyline, setRoutePolyline] = useState<string | null>(null);
   const [busInfo, setBusInfo] = useState<{
     id: string;
     plateNumber: string;
@@ -59,6 +60,7 @@ export default function ParentDashboard() {
   // M5: Realtime notifications state
   const [recentNotifications, setRecentNotifications] = useState<
     Array<{
+      id: number; // ← FIX: Thêm id field vào type
       type: "success" | "info" | "warning";
       title: string;
       time: string;
@@ -236,13 +238,23 @@ export default function ParentDashboard() {
 
       // Add to recent notifications list (max 10 items)
       setRecentNotifications((prev) => {
+        console.log('📋 [PARENT DASH] Adding notification to recent list:', {
+          maThongBao: data.maThongBao,
+          loaiThongBao: data.loaiThongBao,
+          tieuDe: data.tieuDe,
+          title: title,
+          calculatedType: notifType
+        })
+        
         const newNotif = {
+          id: data.maThongBao || Date.now(), // ← FIX: Thêm ID từ payload
           type: notifType,
           title: title,
           time: "Vừa xong",
           timestamp: Date.now(),
         };
         const updated = [newNotif, ...prev].slice(0, 10);
+        console.log('✅ [PARENT DASH] Updated recent notifications:', updated.length, updated)
         return updated;
       });
 
@@ -454,6 +466,7 @@ export default function ParentDashboard() {
       // Add to notifications
       setRecentNotifications((prev) => {
         const newNotif = {
+          id: data.id || Date.now(), // ← FIX: Thêm ID
           type: "warning" as const,
           title: `⚠️ Sự cố: ${data.incidentType || "Khẩn cấp"}`,
           time: "Vừa xong",
@@ -543,6 +556,7 @@ export default function ParentDashboard() {
           const notifications = Array.isArray(res?.data) ? res.data : [];
           if (notifications.length > 0) {
             const mapped = notifications.map((n: any) => ({
+              id: n.maThongBao, // ← FIX: Thêm ID để tránh duplicate trong React
               type: n.loaiThongBao === "trip_incident" ? "warning" : "success",
               title: n.tieuDe || "Thông báo",
               time: "Vừa xong",
@@ -575,27 +589,78 @@ export default function ParentDashboard() {
   // When route changes or student changes, load stops for that route
   useEffect(() => {
     async function loadStops(routeId?: number) {
-      if (!routeId) return;
+      if (!routeId) {
+        console.log("[Parent] loadStops skipped: No routeId");
+        return;
+      }
+      console.log("[Parent] loadStops calling API for route:", routeId, "trip:", selectedTripId);
+      
+      let polyline: string | null = null;
+      let points: any[] = [];
+
+      // 1. Try to get detailed polyline from Trip API if trip is selected
+      if (selectedTripId) {
+        try {
+          // Note: We intentionally skip fetching polyline from backend here
+          // because the backend often returns a simplified straight-line polyline.
+          // By leaving polyline as null, we force SSBMap to auto-fetch detailed
+          // directions from Google Maps API based on the stops.
+          
+          /* 
+          const tripRes = await apiClient.getTripById(selectedTripId);
+          const resBody: any = (tripRes as any).data || tripRes;
+          
+          if (resBody?.success && resBody?.data?.routeInfo?.polyline) {
+             polyline = resBody.data.routeInfo.polyline;
+          } else if (resBody?.data?.polyline) {
+             polyline = resBody.data.polyline;
+          }
+          */
+         console.log("[Parent] Skipped backend polyline to force Google Maps Directions");
+        } catch (e) {
+          console.warn("[Parent] Failed to fetch trip polyline:", e);
+        }
+      }
+
+      // 2. Load stops (and fallback polyline) from Route API
       try {
         const routeRes = await apiClient.getRouteById(routeId);
         const routeData: any = (routeRes as any).data || routeRes;
-        const points: any[] =
-          routeData?.diemDung || routeData?.route?.diemDung || [];
+        
+        // If trip didn't provide polyline, use route polyline (might be less detailed)
+        if (!polyline) {
+          // Also skip route polyline fallback for the same reason
+          // polyline = routeData?.polyline || routeData?.route?.polyline || null;
+          console.log("[Parent] Skipped route polyline fallback");
+        }
+        
+        console.log("[Parent] Final polyline to render:", { 
+          hasPolyline: !!polyline,
+          length: (polyline as string | null)?.length || 0
+        });
+
+        setRoutePolyline(polyline);
+        
+        points = routeData?.diemDung || routeData?.route?.diemDung || [];
         const mapped = points.map((s: any) => ({
           id: (s.maDiem || s.id || `${s.viDo}_${s.kinhDo}`) + "",
           lat: Number(s.viDo || s.lat || s.latitude),
           lng: Number(s.kinhDo || s.lng || s.longitude),
           label: s.tenDiem || s.ten,
+          sequence: s.thuTu || s.sequence || 0, // Map sequence for correct ordering
         }));
+        // Sort by sequence to ensure correct order
+        mapped.sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0));
+
         setStops(
-          mapped.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+          mapped.filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
         );
       } catch (e) {
         console.warn("[Parent] loadStops failed", e);
       }
     }
     loadStops(selectedRouteId);
-  }, [selectedRouteId]);
+  }, [selectedRouteId, selectedTripId]);
 
   // Resolve and select a trip for current selection (run after auth ready)
   useEffect(() => {
@@ -717,6 +782,21 @@ export default function ParentDashboard() {
             try {
               const tripDetailRes = await apiClient.getTripById(tripInfo.maChuyen);
               const tripDetail: any = (tripDetailRes as any)?.data || tripDetailRes;
+              
+              // Fallback: Set route ID from trip detail if not already set
+              if (tripDetail?.maTuyen || tripDetail?.routeId) {
+                const rid = Number(tripDetail.maTuyen || tripDetail.routeId);
+                if (Number.isFinite(rid)) {
+                  setSelectedRouteId((prev) => {
+                    if (!prev) {
+                      console.log("[Parent] Set selectedRouteId from tripDetail:", rid);
+                      return rid;
+                    }
+                    return prev;
+                  });
+                }
+              }
+
               // Try to get dropoff time from schedule or trip
               if (tripDetail?.schedule?.gioKhoiHanh) {
                 const pickupTime = tripDetail.schedule.gioKhoiHanh;
@@ -801,6 +881,7 @@ export default function ParentDashboard() {
           }
 
           return {
+            id: notif.maThongBao, // ← FIX: Thêm ID
             type,
             title,
             time: timeStr,
@@ -1042,6 +1123,18 @@ export default function ParentDashboard() {
                       ] as any
                     }
                     stops={stops}
+                    routes={
+                      selectedRouteId
+                        ? [
+                            {
+                              routeId: selectedRouteId,
+                              routeName: busInfo?.route || "Tuyến đường",
+                              polyline: routePolyline,
+                              color: "#3b82f6", // Blue color
+                            },
+                          ]
+                        : []
+                    }
                     height="500px"
                     followFirstMarker
                     autoFitOnUpdate
@@ -1171,8 +1264,14 @@ export default function ParentDashboard() {
                           : MapPin;
                       return (
                         <div
-                          key={`${notification.timestamp}-${index}`}
-                          className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                          key={notification.id || `${notification.timestamp}-${index}`}
+                          className={`flex items-start gap-4 p-4 rounded-lg transition-all cursor-pointer border-2 ${
+                            notification.type === "warning"
+                              ? "bg-orange-50 dark:bg-orange-950/20 border-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+                              : notification.type === "success"
+                              ? "bg-green-50 dark:bg-green-950/20 border-green-500 hover:bg-green-100 dark:hover:bg-green-900/30"
+                              : "bg-blue-50 dark:bg-blue-950/20 border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                          }`}
                           onClick={() =>
                             setUnreadCount((prev) => Math.max(0, prev - 1))
                           }

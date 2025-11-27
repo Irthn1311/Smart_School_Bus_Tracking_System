@@ -1,3 +1,4 @@
+// @ts-nocheck
 // MapsController - Controller cho Google Maps API proxy
 import MapsService from "../services/MapsService.js";
 

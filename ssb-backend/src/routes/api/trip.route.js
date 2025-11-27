@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import TripController from "../../controllers/TripController.js";
+import TripController from "../../controllers/TripController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

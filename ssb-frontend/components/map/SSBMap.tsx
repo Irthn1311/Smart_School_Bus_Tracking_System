@@ -25,8 +25,8 @@ export interface StopDTO {
   address?: string | null;
   sequence: number;
   dwell_seconds?: number;
-  routeIndex?: number;    // dùng để phân biệt tuyến
-
+  routeIndex?: number; // dùng để phân biệt tuyến
+  studentCount?: number; // 🔥 Số học sinh tại điểm dừng
 }
 
 export interface BusMarker {
@@ -55,7 +55,7 @@ interface SSBMapProps {
   height?: string;
   onStopClick?: (stop: StopDTO) => void;
   onBusClick?: (bus: BusMarker) => void;
-  disableDirections?: boolean;  // true => không vẽ đường, không decode polyline
+  disableDirections?: boolean; // true => không vẽ đường, không decode polyline
 
   className?: string;
   autoFitOnUpdate?: boolean; // Auto fit bounds when markers update
@@ -77,7 +77,7 @@ function SSBMap({
   onBusClick,
   className = "",
   autoFitOnUpdate = false,
-  disableDirections = false, 
+  disableDirections = false,
   followFirstMarker = false,
   showMyLocation = true,
   customLocationLabel,
@@ -209,7 +209,6 @@ function SSBMap({
   // Auto-fetch directions if no polyline but has stops
   // Only fetch if we don't have routes with polylines (for tracking page)
   useEffect(() => {
-
     if (disableDirections) {
       console.log("[SSBMap] Directions disabled, skip auto-fetching");
       return;
@@ -246,19 +245,23 @@ function SSBMap({
       fetchAttemptedRef.current = false;
     }
 
-    if (
+    const shouldFetch =
       !polyline &&
       !fetchedPolyline &&
       !hasRoutePolylines &&
       stops.length >= 2 &&
       !isFetchingDirections &&
-      !fetchAttemptedRef.current
-    ) {
+      !fetchAttemptedRef.current;
+
+    if (shouldFetch) {
       // Mark as attempted immediately to prevent duplicate calls
       fetchAttemptedRef.current = true;
 
       // Debounce: Wait 500ms before actually fetching to avoid rapid-fire requests
       fetchTimeoutRef.current = setTimeout(() => {
+        // Clear the timeout ref so cleanup knows it finished
+        fetchTimeoutRef.current = null;
+
         const sortedStops = [...stops].sort(
           (a, b) => (a.sequence || 0) - (b.sequence || 0)
         );
@@ -293,21 +296,12 @@ function SSBMap({
           !isFinite(destLat) ||
           !isFinite(destLng)
         ) {
-          console.error(
-            "[SSBMap] Invalid coordinates for directions request:",
-            {
-              origin: { lat: originLat, lng: originLng },
-              destination: { lat: destLat, lng: destLng },
-            }
-          );
+          console.error("[SSBMap] Invalid coordinates for directions request");
           setIsFetchingDirections(false);
           return;
         }
 
         setIsFetchingDirections(true);
-        console.log(
-          "[SSBMap] Auto-fetching directions from frontend (no polyline from backend)"
-        );
 
         // Validate coordinate ranges (latitude: -90 to 90, longitude: -180 to 180)
         if (
@@ -320,10 +314,7 @@ function SSBMap({
           destLng < -180 ||
           destLng > 180
         ) {
-          console.error("[SSBMap] Coordinates out of valid range:", {
-            origin: { lat: originLat, lng: originLng },
-            destination: { lat: destLat, lng: destLng },
-          });
+          console.error("[SSBMap] Coordinates out of valid range");
           setIsFetchingDirections(false);
           return;
         }
@@ -339,13 +330,8 @@ function SSBMap({
           !isInVietnam(destLat, destLng)
         ) {
           console.warn(
-            "[SSBMap] Coordinates outside Vietnam bounds, may cause ZERO_RESULTS:",
-            {
-              origin: { lat: originLat, lng: originLng },
-              destination: { lat: destLat, lng: destLng },
-            }
+            "[SSBMap] Coordinates outside Vietnam bounds, may cause ZERO_RESULTS"
           );
-          // Still try, but log warning
         }
 
         const origin = `${originLat},${originLng}`;
@@ -359,15 +345,7 @@ function SSBMap({
           destination.includes("NaN")
         ) {
           console.error(
-            "[SSBMap] Invalid coordinates for directions request:",
-            {
-              origin,
-              destination,
-              originLat,
-              originLng,
-              destLat,
-              destLng,
-            }
+            "[SSBMap] Invalid coordinates for directions request"
           );
           setIsFetchingDirections(false);
           return;
@@ -430,19 +408,8 @@ function SSBMap({
                 return { location: `${lat},${lng}` };
               })
               .filter((wp): wp is { location: string } => wp !== null);
-
-            console.warn(
-              `[SSBMap] Too many stops (${middleStops.length}), sampling to ${waypoints.length} waypoints`
-            );
           }
         }
-
-        console.log("[SSBMap] Calling Directions API with:", {
-          origin,
-          destination,
-          waypointsCount: waypoints.length,
-          mode: "driving",
-        });
 
         // Build request payload - only include waypoints if we have them
         const requestPayload: {
@@ -465,13 +432,6 @@ function SSBMap({
         apiClient
           .getDirections(requestPayload)
           .then((response) => {
-            console.log("[SSBMap] Directions API response:", {
-              success: response.success,
-              hasData: !!response.data,
-              dataKeys: response.data ? Object.keys(response.data) : [],
-              fullResponse: response,
-            });
-
             // Backend returns: { success: true, data: { polyline: "...", legs: [...], ... } }
             if (response.success && response.data) {
               const data = response.data as any;
@@ -485,27 +445,15 @@ function SSBMap({
                 typeof newPolyline === "string" &&
                 newPolyline.trim()
               ) {
-                console.log(
-                  "[SSBMap] Successfully fetched directions, got polyline:",
-                  newPolyline.length,
-                  "chars"
-                );
                 setFetchedPolyline(newPolyline);
               } else {
                 console.warn(
-                  "[SSBMap] Directions API did not return valid polyline:",
-                  {
-                    hasPolyline: !!data.polyline,
-                    hasOverviewPolyline: !!data.overview_polyline,
-                    polylineType: typeof data.polyline,
-                    dataStructure: data,
-                  }
+                  "[SSBMap] Directions API did not return valid polyline"
                 );
               }
             } else {
               console.warn(
-                "[SSBMap] Directions API response not successful or missing data:",
-                response
+                "[SSBMap] Directions API response not successful or missing data"
               );
             }
           })
@@ -526,15 +474,7 @@ function SSBMap({
               err?.message?.includes("ZERO_RESULTS")
             ) {
               console.warn(
-                "[SSBMap] Directions API returned ZERO_RESULTS - no route found between points:",
-                {
-                  origin,
-                  destination,
-                  waypointsCount: waypoints.length,
-                }
-              );
-              console.warn(
-                "[SSBMap] This may happen if coordinates are invalid or no route exists. Will not retry."
+                "[SSBMap] Directions API returned ZERO_RESULTS - no route found between points"
               );
               setIsFetchingDirections(false);
               return; // Don't retry, just fail silently
@@ -542,38 +482,8 @@ function SSBMap({
 
             console.error("[SSBMap] Error fetching directions:", {
               message: err?.message,
-              response: err?.response?.data,
               status: err?.response?.status,
-              error: err?.response?.data?.error,
             });
-
-            // Log the request that failed for debugging
-            console.error("[SSBMap] Failed request details:", {
-              origin,
-              destination,
-              waypointsCount: waypoints.length,
-            });
-
-            // Check for connection errors and provide helpful message
-            if (
-              err?.message === "Network Error" ||
-              err?.code === "ERR_NETWORK" ||
-              err?.code === "ERR_CONNECTION_REFUSED"
-            ) {
-              console.error(
-                "[SSBMap] ⚠️ Backend server không chạy hoặc không thể kết nối!"
-              );
-              console.error("[SSBMap] 💡 Hãy kiểm tra:");
-              console.error(
-                "[SSBMap]   1. Backend server có đang chạy không? (cd ssb-backend && npm run dev)"
-              );
-              console.error(
-                "[SSBMap]   2. Backend có chạy trên port 4000 không?"
-              );
-              console.error(
-                "[SSBMap]   3. Thử truy cập: http://localhost:4000/api/v1/health"
-              );
-            }
 
             setIsFetchingDirections(false);
           })
@@ -587,9 +497,19 @@ function SSBMap({
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
         fetchTimeoutRef.current = null;
+        // Only reset attempted flag if we cancelled a PENDING fetch.
+        // If fetchTimeoutRef.current was null (fetch started), we don't reset.
+        fetchAttemptedRef.current = false;
       }
     };
-  }, [polyline, fetchedPolyline, stops, isFetchingDirections, routes, disableDirections]);
+  }, [
+    polyline,
+    fetchedPolyline,
+    stops,
+    isFetchingDirections,
+    routes,
+    disableDirections,
+  ]);
 
   // Fallback: Create simple polyline from stops if Directions API fails
   const createSimplePolylineFromStops = useCallback(
@@ -655,7 +575,6 @@ function SSBMap({
 
   // Memoized polyline path - Ưu tiên polyline từ backend, sau đó từ fetched directions, cuối cùng là fallback
   const polylinePath = useMemo(() => {
-
     if (disableDirections) return null;
     // Use polyline from backend first, then fetched polyline
     const activePolyline = polyline || fetchedPolyline;
@@ -709,9 +628,18 @@ function SSBMap({
 
     // Fallback: Tạo polyline đơn giản từ stops nếu không có polyline và không đang fetch
     // CHỈ tạo fallback khi KHÔNG có routes với polylines (để tránh vẽ đường chim bay khi đã có đường đi thực tế)
-    const hasRoutePolylines = routes && routes.length > 0 && routes.some((r) => r.polyline && r.polyline.trim());
-    
-    if (stops && stops.length >= 2 && !isFetchingDirections && geometryReady && !hasRoutePolylines) {
+    const hasRoutePolylines =
+      routes &&
+      routes.length > 0 &&
+      routes.some((r) => r.polyline && r.polyline.trim());
+
+    if (
+      stops &&
+      stops.length >= 2 &&
+      !isFetchingDirections &&
+      geometryReady &&
+      !hasRoutePolylines
+    ) {
       const simplePath = createSimplePolylineFromStops(stops);
       if (simplePath) {
         console.log(
@@ -826,6 +754,18 @@ function SSBMap({
             streetViewControl: false,
             fullscreenControl: true,
             zoomControl: true,
+            // 🔥 Tắt POI (Points of Interest) markers để không hiển thị các địa điểm mặc định
+            styles: [
+              {
+                featureType: "poi",
+                elementType: "labels",
+                stylers: [{ visibility: "off" }],
+              },
+              {
+                featureType: "poi.business",
+                stylers: [{ visibility: "off" }],
+              },
+            ],
           });
 
           mapInstanceRef.current = map;
@@ -1041,7 +981,18 @@ function SSBMap({
 
                   const position = new g.maps.LatLng(latitude, longitude);
 
-                  if (!userMarkerRef.current) {
+                  // 🔥 KHÔNG tạo user marker nếu đã có bus marker (tránh trùng lặp)
+                  const hasBusMarker = buses && buses.length > 0;
+
+                  if (hasBusMarker) {
+                    // Nếu có bus marker, chỉ pan camera đến vị trí, KHÔNG tạo user marker
+                    console.log(
+                      "[SSBMap] Bus marker exists, only panning camera to GPS location"
+                    );
+                    map.panTo(position);
+                    map.setZoom(16);
+                  } else if (!userMarkerRef.current) {
+                    // Chỉ tạo user marker khi KHÔNG có bus marker
                     userMarkerRef.current = new g.maps.Marker({
                       position,
                       map,
@@ -1114,6 +1065,7 @@ function SSBMap({
                       }, 500);
                     }
                   } else {
+                    // Update existing user marker (chỉ khi không có bus marker)
                     userMarkerRef.current.setPosition(position);
                     userMarkerRef.current.setMap(map);
                     userMarkerRef.current.setTitle(
@@ -1356,8 +1308,11 @@ function SSBMap({
                         POSITION_UNAVAILABLE: err?.code === 2,
                         TIMEOUT: err?.code === 3,
                       };
-                      console.warn("[SSBMap] Geolocation error:", JSON.stringify(errorInfo));
-                      
+                      console.warn(
+                        "[SSBMap] Geolocation error:",
+                        JSON.stringify(errorInfo)
+                      );
+
                       let errorMsg = "Không thể lấy vị trí hiện tại.";
                       if (err.code === 1) {
                         errorMsg =
@@ -1415,8 +1370,11 @@ function SSBMap({
   // Draw polyline - IMPROVED VERSION
   useEffect(() => {
     // Check if we have routes with polylines - if so, don't render single polyline (routes will be rendered separately)
-    const hasRoutePolylines = routes && routes.length > 0 && routes.some((r) => r.polyline && r.polyline.trim());
-    
+    const hasRoutePolylines =
+      routes &&
+      routes.length > 0 &&
+      routes.some((r) => r.polyline && r.polyline.trim());
+
     console.log("[SSBMap] Polyline effect triggered:", {
       hasMap: !!mapInstanceRef.current,
       hasPolylinePath: !!polylinePath,
@@ -1448,7 +1406,9 @@ function SSBMap({
 
     // If we have routes with polylines, don't render single polyline (routes will be rendered separately)
     if (hasRoutePolylines) {
-      console.log("[SSBMap] Routes with polylines detected, skipping single polyline render");
+      console.log(
+        "[SSBMap] Routes with polylines detected, skipping single polyline render"
+      );
       return;
     }
 
@@ -1550,20 +1510,18 @@ function SSBMap({
     } catch (error) {
       console.error("[SSBMap] Error rendering polyline:", error);
     }
-  }, [polylinePath, routes, disableDirections]); // Add routes to dependencies
+  }, [polylinePath, routes, disableDirections, isMapReady]); // Add routes to dependencies
 
   // Render multiple route polylines
   useEffect(() => {
-
     // Nếu tắt directions: xoá polyline cũ và không vẽ lại
-  if (disableDirections) {
-    routePolylinesRef.current.forEach((polyline) => {
-      polyline.setMap(null);
-    });
-    routePolylinesRef.current.clear();
-    return;
-  }
-
+    if (disableDirections) {
+      routePolylinesRef.current.forEach((polyline) => {
+        polyline.setMap(null);
+      });
+      routePolylinesRef.current.clear();
+      return;
+    }
 
     if (!mapInstanceRef.current || !geometryReady || routes.length === 0) {
       return;
@@ -1685,7 +1643,15 @@ function SSBMap({
         });
       }
     }
-  }, [routes, geometryReady, autoFitOnUpdate, decodePolyline, disableDirections]);
+  }, [
+    routes,
+    geometryReady,
+    autoFitOnUpdate,
+    disableDirections,
+    isMapReady,
+    decodePolyline,
+    disableDirections,
+  ]);
 
   // Render stop markers
   useEffect(() => {
@@ -1696,7 +1662,9 @@ function SSBMap({
     });
 
     if (!mapInstanceRef.current || !isMapReady) {
-      console.warn("[SSBMap] Map instance not ready for stops, will retry when map is ready");
+      console.warn(
+        "[SSBMap] Map instance not ready for stops, will retry when map is ready"
+      );
       return;
     }
 
@@ -1723,6 +1691,16 @@ function SSBMap({
       (a, b) => (a.sequence || 0) - (b.sequence || 0)
     );
     console.log("[SSBMap] Rendering", sortedStops.length, "stops");
+    console.log(
+      "[SSBMap] 🔍 Stop coordinates for markers:",
+      sortedStops.map((s) => ({
+        id: s.maDiem,
+        name: s.tenDiem,
+        lat: s.viDo,
+        lng: s.kinhDo,
+        sequence: s.sequence,
+      }))
+    );
 
     let validStopsCount = 0;
     sortedStops.forEach((stop, index) => {
@@ -1771,7 +1749,7 @@ function SSBMap({
           icon: {
             path: g.maps.SymbolPath.CIRCLE,
             scale: 8,
-            fillColor: routeColor,     // <<--- DÙNG Ở ĐÂY
+            fillColor: routeColor, // <<--- DÙNG Ở ĐÂY
             fillOpacity: 1,
             strokeColor: "#FFFFFF",
             strokeWeight: 2,
@@ -1790,32 +1768,91 @@ function SSBMap({
           marker.addListener("click", () => onStopClick(stop));
         }
 
+        // 🔥 Tạo info window với dữ liệu THẬT từ stop object
         const infoWindow = new g.maps.InfoWindow({
           content: `
-            <div style="padding: 8px; min-width: 200px;">
-              <h3 style="margin: 0 0 4px 0; font-size: 14px; font-weight: bold;">
-                ${stop.sequence}. ${stop.tenDiem}
+            <div style="padding: 12px; min-width: 250px; font-family: sans-serif;">
+              <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold; color: #1e40af;">
+                📍 ${stop.sequence}. ${stop.tenDiem}
               </h3>
-              ${stop.address ? `<p style="margin: 0; font-size: 12px; color: #666;">${stop.address}</p>` : ""}
-              ${stop.dwell_seconds ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #666;">Dừng: ${stop.dwell_seconds}s</p>` : ""}
+              ${
+                stop.address
+                  ? `<p style="margin: 0 0 8px 0; font-size: 13px; color: #666; line-height: 1.5;">
+                      📌 ${stop.address}
+                    </p>`
+                  : ""
+              }
+              ${
+                stop.studentCount !== undefined && stop.studentCount > 0
+                  ? `<p style="margin: 0; font-size: 13px; color: #059669; font-weight: 500;">
+                      👥 ${stop.studentCount} học sinh
+                    </p>`
+                  : `<p style="margin: 0; font-size: 13px; color: #9ca3af;">
+                      👥 Không có học sinh
+                    </p>`
+              }
             </div>
           `,
         });
+
+        // 🔥 Xóa tất cả listeners cũ và thêm listener mới
+        google.maps.event.clearInstanceListeners(marker);
+
+        if (onStopClick) {
+          marker.addListener("click", () => onStopClick(stop));
+        }
 
         marker.addListener("click", () => {
           infoWindow.open(mapInstanceRef.current!, marker);
         });
 
         markersRef.current.set(key, marker);
-      }
- else {
-        // Update existing marker position
+      } else {
+        // 🔥 Update existing marker: CẬP NHẬT cả position VÀ info window
         const lat = Number(stop.viDo);
         const lng = Number(stop.kinhDo);
         if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
           marker.setPosition({ lat, lng });
         }
         marker.setTitle(`${stop.sequence}. ${stop.tenDiem}`);
+
+        // 🔥 TẠO LẠI info window với dữ liệu mới
+        const updatedInfoWindow = new g.maps.InfoWindow({
+          content: `
+            <div style="padding: 12px; min-width: 250px; font-family: sans-serif;">
+              <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold; color: #1e40af;">
+                📍 ${stop.sequence}. ${stop.tenDiem}
+              </h3>
+              ${
+                stop.address
+                  ? `<p style="margin: 0 0 8px 0; font-size: 13px; color: #666; line-height: 1.5;">
+                      📌 ${stop.address}
+                    </p>`
+                  : ""
+              }
+              ${
+                stop.studentCount !== undefined && stop.studentCount > 0
+                  ? `<p style="margin: 0; font-size: 13px; color: #059669; font-weight: 500;">
+                      👥 ${stop.studentCount} học sinh
+                    </p>`
+                  : `<p style="margin: 0; font-size: 13px; color: #9ca3af;">
+                      👥 Không có học sinh
+                    </p>`
+              }
+            </div>
+          `,
+        });
+
+        // 🔥 Xóa tất cả listeners cũ và thêm listener mới với info window MỚI
+        google.maps.event.clearInstanceListeners(marker);
+
+        if (onStopClick) {
+          marker.addListener("click", () => onStopClick(stop));
+        }
+
+        marker.addListener("click", () => {
+          updatedInfoWindow.open(mapInstanceRef.current!, marker);
+        });
       }
     });
 
@@ -1860,9 +1897,27 @@ function SSBMap({
 
   // Render bus markers
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
+    console.log("[SSBMap] 🚌 Bus markers effect triggered:", {
+      hasMap: !!mapInstanceRef.current,
+      busCount: buses.length,
+      buses,
+    });
+
+    if (!mapInstanceRef.current) {
+      console.warn("[SSBMap] ❌ No map instance, cannot render bus markers");
+      return;
+    }
 
     const g = getGoogle();
+
+    // 🔥 Xóa user marker nếu đã có bus marker (tránh trùng lặp)
+    if (buses && buses.length > 0 && userMarkerRef.current) {
+      console.log("[SSBMap] Removing user marker because bus marker exists");
+      userMarkerRef.current.setMap(null);
+      userMarkerRef.current = null;
+    }
+
+    console.log("[SSBMap] 🔄 Starting to render", buses.length, "bus markers");
 
     buses.forEach((bus) => {
       const lat = Number(bus.lat);
@@ -1884,9 +1939,9 @@ function SSBMap({
         incident: "#ef4444", // red-500 (sự cố)
       };
 
-      const busStatus = bus.status || "idle"
-      const statusColor = statusColors[busStatus] || "#6b7280"
-      const rotation = typeof bus.heading === "number" ? bus.heading : 0
+      const busStatus = bus.status || "idle";
+      const statusColor = statusColors[busStatus] || "#6b7280";
+      const rotation = typeof bus.heading === "number" ? bus.heading : 0;
 
       if (!marker) {
         // Create new bus marker with status-based color
@@ -1903,12 +1958,21 @@ function SSBMap({
             rotation: rotation,
           },
           title: bus.label || bus.id,
-          zIndex: busStatus === "incident" ? 1000 : busStatus === "late" ? 500 : 100, // Higher z-index for alerts
+          zIndex:
+            busStatus === "incident" ? 1000 : busStatus === "late" ? 500 : 100, // Higher z-index for alerts
         });
 
         if (onBusClick) {
           marker.addListener("click", () => onBusClick(bus));
         }
+
+        console.log("[SSBMap] ✅ Created new bus marker:", {
+          id: bus.id,
+          lat,
+          lng,
+          status: busStatus,
+          color: statusColor,
+        });
 
         markersRef.current.set(key, marker);
       } else {
@@ -1924,7 +1988,9 @@ function SSBMap({
             icon.fillColor = statusColor;
             icon.rotation = rotation;
             marker.setIcon(icon);
-            marker.setZIndex(busStatus === "incident" ? 1000 : busStatus === "late" ? 500 : 100);
+            marker.setZIndex(
+              busStatus === "incident" ? 1000 : busStatus === "late" ? 500 : 100
+            );
           }
         }
       }
@@ -1987,7 +2053,7 @@ function SSBMap({
         }
       }
     }
-  }, [buses, onBusClick, autoFitOnUpdate, followFirstMarker]);
+  }, [buses, onBusClick, autoFitOnUpdate, followFirstMarker, isMapReady]);
 
   // Cleanup on unmount
   useEffect(() => {

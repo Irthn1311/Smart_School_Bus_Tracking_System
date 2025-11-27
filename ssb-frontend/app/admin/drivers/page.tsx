@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -50,29 +51,30 @@ type Driver = {
   raw?: any
 }
 
-const statusConfig = {
-  hoat_dong: {
-    label: "Đang làm việc",
-    variant: "default" as const,
-    icon: CheckCircle2,
-    className: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-  },
-  tam_nghi: {
-    label: "Tạm nghỉ",
-    variant: "outline" as const,
-    icon: AlertCircle,
-    className: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
-  },
-  nghi_huu: {
-    label: "Nghỉ hưu",
-    variant: "outline" as const,
-    icon: XCircle,
-    className: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
-  },
-}
-
 export default function DriversPage() {
+  const { t } = useLanguage()
   const [searchQuery, setSearchQuery] = useState("")
+  
+  const statusConfig = {
+    hoat_dong: {
+      label: t("drivers.working"),
+      variant: "default" as const,
+      icon: CheckCircle2,
+      className: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+    },
+    tam_nghi: {
+      label: t("drivers.onLeave"),
+      variant: "outline" as const,
+      icon: AlertCircle,
+      className: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
+    },
+    nghi_huu: {
+      label: t("drivers.retired"),
+      variant: "outline" as const,
+      icon: XCircle,
+      className: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+    },
+  }
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
@@ -106,11 +108,11 @@ export default function DriversPage() {
       const items = Array.isArray(data) ? data : data?.data || []
       setDrivers(items.map(mapDriver))
     } catch (e: any) {
-      setError(e?.message || "Không lấy được danh sách tài xế")
+      setError(e?.message || t("drivers.loadError"))
       console.error("Lỗi khi lấy danh sách tài xế:", e)
       toast({
-        title: "Lỗi",
-        description: e?.message || "Không lấy được danh sách tài xế",
+        title: t("common.error"),
+        description: e?.message || t("drivers.loadError"),
         variant: "destructive",
       })
     } finally {
@@ -136,19 +138,19 @@ export default function DriversPage() {
   }
 
   const handleDelete = async (driver: Driver) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa tài xế "${driver.name}"?`)) return
+    if (!confirm(t("drivers.deleteConfirm", { name: driver.name }))) return
     try {
       await apiClient.deleteDriver(driver.id)
       toast({
-        title: "Thành công",
-        description: "Đã xóa tài xế",
+        title: t("common.success"),
+        description: t("drivers.deleteSuccess"),
       })
       fetchDrivers()
     } catch (err: any) {
       console.error(err)
       toast({
-        title: "Lỗi",
-        description: err?.message || "Xóa thất bại",
+        title: t("common.error"),
+        description: err?.message || t("drivers.deleteError"),
         variant: "destructive",
       })
     }
@@ -162,8 +164,8 @@ export default function DriversPage() {
       setIsViewDialogOpen(true)
     } catch (err: any) {
       toast({
-        title: "Lỗi",
-        description: err?.message || "Không thể lấy thông tin tài xế",
+        title: t("common.error"),
+        description: err?.message || t("drivers.loadError"),
         variant: "destructive",
       })
     }
@@ -175,21 +177,21 @@ export default function DriversPage() {
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Quản lý Tài xế</h1>
-            <p className="text-muted-foreground mt-1.5">Quản lý thông tin và phân công tài xế trong hệ thống</p>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("drivers.title")}</h1>
+            <p className="text-muted-foreground mt-1.5">{t("drivers.description")}</p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90 shadow-sm">
                 <Plus className="w-4 h-4 mr-2" />
-                Thêm tài xế mới
+                {t("drivers.addNew")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-2xl">Thêm tài xế mới</DialogTitle>
+                <DialogTitle className="text-2xl">{t("drivers.addNew")}</DialogTitle>
                 <DialogDescription>
-                  Nhập thông tin tài xế và tài khoản để thêm vào hệ thống
+                  {t("drivers.description")}
                 </DialogDescription>
               </DialogHeader>
               <DriverForm
@@ -209,7 +211,7 @@ export default function DriversPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Tổng tài xế</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("drivers.total")}</p>
                   <p className="text-3xl font-bold text-foreground mt-2">{stats.total}</p>
                 </div>
                 <div className="rounded-full bg-blue-500/10 p-3">
@@ -223,7 +225,7 @@ export default function DriversPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Đang làm việc</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("drivers.working")}</p>
                   <p className="text-3xl font-bold text-foreground mt-2">{stats.active}</p>
                 </div>
                 <div className="rounded-full bg-green-500/10 p-3">
@@ -237,7 +239,7 @@ export default function DriversPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Tạm nghỉ</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("drivers.onLeave")}</p>
                   <p className="text-3xl font-bold text-foreground mt-2">{stats.onLeave}</p>
                 </div>
                 <div className="rounded-full bg-yellow-500/10 p-3">
@@ -251,7 +253,7 @@ export default function DriversPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Nghỉ hưu</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("drivers.retired")}</p>
                   <p className="text-3xl font-bold text-foreground mt-2">{stats.retired}</p>
                 </div>
                 <div className="rounded-full bg-gray-500/10 p-3">
@@ -266,11 +268,11 @@ export default function DriversPage() {
         <Card className="border-border/50">
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-xl">Danh sách tài xế</CardTitle>
+              <CardTitle className="text-xl">{t("drivers.list")}</CardTitle>
               <div className="relative w-full sm:w-80">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Tìm theo tên, email, số điện thoại..."
+                  placeholder={t("drivers.search")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -282,7 +284,7 @@ export default function DriversPage() {
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Đang tải danh sách tài xế...</span>
+                <span className="ml-2 text-muted-foreground">{t("common.loading")}</span>
               </div>
             )}
             {error && (
@@ -293,7 +295,7 @@ export default function DriversPage() {
             {!loading && !error && filteredDrivers.length === 0 && (
               <div className="text-center py-12">
                 <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">Không tìm thấy tài xế nào</p>
+                <p className="text-muted-foreground">{t("common.noResults")}</p>
               </div>
             )}
             {!loading && !error && filteredDrivers.length > 0 && (
@@ -337,13 +339,13 @@ export default function DriversPage() {
                           {driver.license && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Award className="w-4 h-4" />
-                              <span>Bằng lái: {driver.license}</span>
+                              <span>{t("drivers.license")} {driver.license}</span>
                             </div>
                           )}
                           {driver.experience !== undefined && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Clock className="w-4 h-4" />
-                              <span>{driver.experience} năm kinh nghiệm</span>
+                              <span>{driver.experience} {t("drivers.experience")}</span>
                             </div>
                           )}
                         </div>
@@ -356,7 +358,7 @@ export default function DriversPage() {
                             onClick={() => handleView(driver)}
                           >
                             <Eye className="w-4 h-4 mr-2" />
-                            Xem
+                            {t("drivers.view")}
                           </Button>
                           <Button
                             variant="ghost"
@@ -368,7 +370,7 @@ export default function DriversPage() {
                             }}
                           >
                             <Edit className="w-4 h-4 mr-2" />
-                            Sửa
+                            {t("drivers.edit")}
                           </Button>
                           <Button
                             variant="ghost"
@@ -392,8 +394,8 @@ export default function DriversPage() {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-2xl">Chỉnh sửa tài xế</DialogTitle>
-              <DialogDescription>Cập nhật thông tin tài xế và tài khoản</DialogDescription>
+              <DialogTitle className="text-2xl">{t("drivers.edit")}</DialogTitle>
+              <DialogDescription>{t("drivers.description")}</DialogDescription>
             </DialogHeader>
             {editingDriver && (
               <DriverForm

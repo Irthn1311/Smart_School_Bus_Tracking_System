@@ -1,6 +1,6 @@
 import express from "express";
-import TelemetryController from "../../controllers/TelemetryController.js";
-import { authenticate } from "../../middlewares/auth.js";
+import TelemetryController from "../../controllers/TelemetryController.ts";
+import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -19,7 +19,7 @@ const router = express.Router();
 // Body: { lat, lng, speed?, heading? }
 router.post(
   "/trips/:id/telemetry",
-  authenticate,
+  AuthMiddleware.authenticate,
   TelemetryController.updatePosition
 );
 
@@ -29,7 +29,7 @@ router.post(
 // Lấy vị trí hiện tại của xe (từ cache in-memory)
 router.get(
   "/buses/:id/position",
-  authenticate,
+  AuthMiddleware.authenticate,
   TelemetryController.getPosition
 );
 

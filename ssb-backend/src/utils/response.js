@@ -29,6 +29,29 @@ export function ok(res, data = null, meta = null) {
 }
 
 /**
+ * Generic success response (alias for ok, supports message)
+ * @param {Response} res - Express response object
+ * @param {any} data - Response data
+ * @param {string} message - Optional success message
+ * @returns {Response}
+ */
+export function success(res, data = null, message = null) {
+  const response = {
+    success: true,
+  };
+
+  if (data !== null) {
+    response.data = data;
+  }
+
+  if (message !== null) {
+    response.message = message;
+  }
+
+  return res.status(200).json(response);
+}
+
+/**
  * Created response (201 Created)
  * @param {Response} res - Express response object
  * @param {any} data - Created resource data

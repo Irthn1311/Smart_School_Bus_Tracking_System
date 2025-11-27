@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,44 +15,13 @@ import { apiClient } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 export default function NotificationsPage() {
+  const { t } = useLanguage()
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("all")
   const { toast } = useToast()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true)
-        const res = await apiClient.getNotifications({ limit: 100 })
-        const arr = Array.isArray(res?.data) ? res.data : []
-        const mapped = arr.map((n: any) => {
-          const dt = n.thoiGianGui ? new Date(n.thoiGianGui) : new Date()
-          const timeAgo = getTimeAgo(dt)
-          let type = "info"
-          if (n.loaiThongBao === "su_co") type = "danger"
-          else if (n.loaiThongBao === "chuyen_di") type = n.tieuDe?.includes("hoàn thành") || n.tieuDe?.includes("thành công") ? "success" : "info"
-          else if (n.tieuDe?.includes("trễ") || n.tieuDe?.includes("cảnh báo")) type = "warning"
-          return {
-            id: String(n.maThongBao || n.id || Date.now()),
-            type,
-            title: n.tieuDe || "Thông báo",
-            description: n.noiDung || "",
-            time: timeAgo,
-            read: !!n.daDoc,
-          }
-        })
-        setNotifications(mapped)
-      } catch (e) {
-        console.error("Failed to load notifications", e)
-        toast({ title: "Lỗi", description: "Không thể tải thông báo", variant: "destructive" })
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [toast])
-
+  // Helper function to map notification type
   const getTimeAgo = (date: Date) => {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
@@ -65,23 +35,142 @@ export default function NotificationsPage() {
     return `${diffDays} ngày trước`
   }
 
+  // Helper to determine notification type
+  const getNotificationType = (n: any) => {
+    let type = "info"
+    console.log('🔍 [getNotificationType] Input:', { loaiThongBao: n.loaiThongBao, tieuDe: n.tieuDe })
+    
+    if (n.loaiThongBao === "su_co") type = "danger"
+    else if (n.loaiThongBao === "chuyen_di") {
+      type = n.tieuDe?.includes("hoàn thành") || n.tieuDe?.includes("thành công") ? "success" : "info"
+    }
+    else if (n.tieuDe?.includes("trễ") || n.tieuDe?.includes("cảnh báo")) type = "warning"
+    
+    console.log('✅ [getNotificationType] Result:', type)
+    return type
+  }
+
+  // Initial load from API
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true)
+        const res = await apiClient.getNotifications({ limit: 100 })
+        console.log('🔍 [ADMIN LOAD] Raw API response:', res)
+        const arr = Array.isArray(res?.data) ? res.data : []
+        console.log('🔍 [ADMIN LOAD] Total notifications from API:', arr.length)
+        
+        const mapped = arr.map((n: any) => {
+          const dt = n.thoiGianGui ? new Date(n.thoiGianGui) : new Date()
+          const timeAgo = getTimeAgo(dt)
+          const type = getNotificationType(n)
+          
+          console.log('📋 [ADMIN LOAD] Processing notification:', {
+            maThongBao: n.maThongBao,
+            loaiThongBao: n.loaiThongBao,
+            tieuDe: n.tieuDe,
+            calculatedType: type,
+            daDoc: n.daDoc
+          })
+          
+          return {
+            id: String(n.maThongBao || n.id || Date.now()),
+            type,
+            title: n.tieuDe || "Thông báo",
+            description: n.noiDung || "",
+            time: timeAgo,
+            read: !!n.daDoc,
+          }
+        })
+        console.log('✅ [ADMIN LOAD] Mapped notifications:', mapped.length, mapped)
+        setNotifications(mapped)
+      } catch (e) {
+        console.error("Failed to load notifications", e)
+        toast({ title: t("common.error"), description: t("notifications.loadError"), variant: "destructive" })
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [toast])
+
+  // 🔔 REALTIME: Listen for new notifications via window event
+  useEffect(() => {
+    const handleNewNotification = (event: any) => {
+      const payload = event.detail
+      console.log('🔔 [ADMIN NOTIF] Received new notification:', payload)
+      console.log('🔔 [ADMIN NOTIF] Event type:', event.type)
+      console.log('🔔 [ADMIN NOTIF] Payload details:', {
+        maThongBao: payload.maThongBao,
+        loaiThongBao: payload.loaiThongBao,
+        tieuDe: payload.tieuDe,
+        noiDung: payload.noiDung
+      })
+
+      const dt = payload.thoiGianGui ? new Date(payload.thoiGianGui) : new Date()
+      const type = getNotificationType(payload)
+      console.log('🔍 [ADMIN NOTIF] Calculated type:', type, 'from loaiThongBao:', payload.loaiThongBao)
+      
+      const newNotif = {
+        id: String(payload.maThongBao || Date.now()),
+        type,
+        title: payload.tieuDe || "Thông báo",
+        description: payload.noiDung || "",
+        time: "Vừa xong",
+        read: false,
+      }
+
+      console.log('✅ [ADMIN NOTIF] Adding to list:', newNotif)
+      setNotifications((prev) => {
+        console.log('📊 [ADMIN NOTIF] Current list size:', prev.length)
+        const updated = [newNotif, ...prev]
+        console.log('📊 [ADMIN NOTIF] New list size:', updated.length)
+        return updated
+      })
+
+      // Show toast for important notifications
+      if (type === "danger" || type === "warning") {
+        toast({
+          title: newNotif.title,
+          description: newNotif.description,
+          variant: type === "danger" ? "destructive" : "default",
+        })
+      }
+    }
+
+    window.addEventListener("notificationNew", handleNewNotification)
+    return () => {
+      window.removeEventListener("notificationNew", handleNewNotification)
+    }
+  }, [toast])
+
   const markAllRead = async () => {
     try {
       await apiClient.markAllNotificationsRead()
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-      toast({ title: "Thành công", description: "Đã đánh dấu tất cả đã đọc" })
+      toast({ title: t("common.success"), description: t("notifications.markAllReadSuccess") })
     } catch (e) {
-      toast({ title: "Lỗi", description: "Không thể đánh dấu đã đọc", variant: "destructive" })
+      toast({ title: t("common.error"), description: t("notifications.markAllReadError"), variant: "destructive" })
     }
   }
 
   const deleteNotification = async (id: string) => {
-    try {
-      await apiClient.deleteNotification(Number(id))
+    // Skip API call if ID is a timestamp (realtime notification not yet in DB)
+    const numId = Number(id)
+    if (numId > 1000000000000) {
+      console.log('⚠️ [ADMIN NOTIF] Skipping delete API for temporary ID:', id)
+      // Just remove from local state
       setNotifications((prev) => prev.filter((n) => n.id !== id))
       toast({ title: "Thành công", description: "Đã xóa thông báo" })
+      return
+    }
+
+    try {
+      await apiClient.deleteNotification(numId)
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+      toast({ title: t("common.success"), description: t("notifications.deleteSuccess") })
     } catch (e) {
-      toast({ title: "Lỗi", description: "Không thể xóa thông báo", variant: "destructive" })
+      toast({ title: t("common.error"), description: t("notifications.deleteError"), variant: "destructive" })
     }
   }
 
@@ -103,12 +192,12 @@ export default function NotificationsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Thông báo & Cảnh báo</h1>
-            <p className="text-muted-foreground mt-1">Theo dõi các thông báo và cảnh báo hệ thống</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("notifications.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("notifications.description")}</p>
           </div>
           <Button variant="outline" onClick={markAllRead} disabled={loading}>
             <CheckCircle className="w-4 h-4 mr-2" />
-            Đánh dấu tất cả đã đọc
+            {t("notifications.markAllRead")}
           </Button>
         </div>
 
@@ -119,7 +208,7 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-2xl font-bold text-foreground">{unreadCount}</div>
-                  <p className="text-sm text-muted-foreground">Chưa đọc</p>
+                  <p className="text-sm text-muted-foreground">{t("notifications.unread")}</p>
                 </div>
                 <Bell className="w-8 h-8 text-primary" />
               </div>
@@ -130,7 +219,7 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-2xl font-bold text-warning">{warningCount}</div>
-                  <p className="text-sm text-muted-foreground">Cảnh báo</p>
+                  <p className="text-sm text-muted-foreground">{t("notifications.warning")}</p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-warning" />
               </div>
@@ -141,7 +230,7 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-2xl font-bold text-destructive">{dangerCount}</div>
-                  <p className="text-sm text-muted-foreground">Khẩn cấp</p>
+                  <p className="text-sm text-muted-foreground">{t("notifications.urgent")}</p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-destructive" />
               </div>
@@ -152,7 +241,7 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-2xl font-bold text-success">{successCount}</div>
-                  <p className="text-sm text-muted-foreground">Thành công</p>
+                  <p className="text-sm text-muted-foreground">{t("notifications.success")}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-success" />
               </div>
@@ -163,25 +252,25 @@ export default function NotificationsPage() {
         {/* Notifications List */}
         <Card className="border-border/50">
           <CardHeader>
-            <CardTitle>Danh sách thông báo</CardTitle>
+            <CardTitle>{t("notifications.list")}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="py-12 text-center text-muted-foreground">Đang tải thông báo...</div>
+              <div className="py-12 text-center text-muted-foreground">{t("common.loading")}</div>
             ) : (
               <Tabs defaultValue="all" onValueChange={setFilter}>
                 <TabsList className="mb-4">
-                  <TabsTrigger value="all">Tất cả ({notifications.length})</TabsTrigger>
-                  <TabsTrigger value="unread">Chưa đọc ({unreadCount})</TabsTrigger>
-                  <TabsTrigger value="warning">Cảnh báo ({warningCount})</TabsTrigger>
-                  <TabsTrigger value="success">Thành công ({successCount})</TabsTrigger>
+                  <TabsTrigger value="all">{t("notifications.all")} ({notifications.length})</TabsTrigger>
+                  <TabsTrigger value="unread">{t("notifications.unread")} ({unreadCount})</TabsTrigger>
+                  <TabsTrigger value="warning">{t("notifications.warning")} ({warningCount})</TabsTrigger>
+                  <TabsTrigger value="success">{t("notifications.success")} ({successCount})</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="all">
                   <ScrollArea className="h-[600px] pr-4">
                     <div className="space-y-3">
                       {filteredNotifications.length === 0 ? (
-                        <div className="py-12 text-center text-muted-foreground">Không có thông báo</div>
+                        <div className="py-12 text-center text-muted-foreground">{t("notifications.noNotifications")}</div>
                       ) : (
                         filteredNotifications.map((notification) => (
                           <Card
@@ -242,7 +331,7 @@ export default function NotificationsPage() {
                   <ScrollArea className="h-[600px] pr-4">
                     <div className="space-y-3">
                       {filteredNotifications.length === 0 ? (
-                        <div className="py-12 text-center text-muted-foreground">Không có thông báo chưa đọc</div>
+                        <div className="py-12 text-center text-muted-foreground">{t("notifications.noNotifications")}</div>
                       ) : (
                         filteredNotifications.map((notification) => (
                           <Card key={notification.id} className="border-primary/30 bg-card">

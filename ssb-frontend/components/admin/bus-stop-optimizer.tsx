@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useLanguage } from "@/lib/language-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,6 +91,7 @@ interface VRPResult {
 }
 
 export function BusStopOptimizer() {
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"tier1" | "tier2" | "full">("full");
@@ -613,9 +615,9 @@ export function BusStopOptimizer() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Tối Ưu Hóa Điểm Dừng & Tuyến Xe</h1>
+          <h1 className="text-3xl font-bold">{t("optimize.title")}</h1>
           <p className="text-muted-foreground mt-2">
-            Sử dụng thuật toán Greedy Maximum Coverage và VRP để tối ưu hóa hệ thống
+            {t("optimize.description")}
           </p>
         </div>
       </div>
@@ -624,15 +626,15 @@ export function BusStopOptimizer() {
         <TabsList>
           <TabsTrigger value="full">
             <Zap className="w-4 h-4 mr-2" />
-            Tối Ưu Hoàn Chỉnh
+            {t("optimize.complete")}
           </TabsTrigger>
           <TabsTrigger value="tier1">
             <MapPin className="w-4 h-4 mr-2" />
-            Tầng 1: Điểm Dừng
+            {t("optimize.tier1")}
           </TabsTrigger>
           <TabsTrigger value="tier2">
             <Route className="w-4 h-4 mr-2" />
-            Tầng 2: Tuyến Xe
+            {t("optimize.tier2")}
           </TabsTrigger>
         </TabsList>
 
@@ -642,13 +644,13 @@ export function BusStopOptimizer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Tham Số
+                {t("optimize.parameters")}
               </CardTitle>
-              <CardDescription>Điều chỉnh tham số tối ưu hóa</CardDescription>
+              <CardDescription>{t("optimize.parametersDesc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="r_walk">Bán kính đi bộ (mét)</Label>
+                <Label htmlFor="r_walk">{t("optimize.walkingRadius")}</Label>
                 <Input
                   id="r_walk"
                   type="number"
@@ -659,11 +661,11 @@ export function BusStopOptimizer() {
                   min={100}
                   max={2000}
                 />
-                <p className="text-xs text-muted-foreground">Khoảng cách tối đa học sinh đi bộ đến điểm dừng</p>
+                <p className="text-xs text-muted-foreground">{t("optimize.walkingRadiusDesc")}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="s_max">Số học sinh tối đa/điểm dừng</Label>
+                <Label htmlFor="s_max">{t("optimize.maxStudentsPerStop")}</Label>
                 <Input
                   id="s_max"
                   type="number"
@@ -674,11 +676,11 @@ export function BusStopOptimizer() {
                   min={1}
                   max={100}
                 />
-                <p className="text-xs text-muted-foreground">Giới hạn số học sinh tại mỗi điểm dừng</p>
+                <p className="text-xs text-muted-foreground">{t("optimize.maxStudentsPerStopDesc")}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="c_bus">Sức chứa xe buýt</Label>
+                <Label htmlFor="c_bus">{t("optimize.busCapacity")}</Label>
                 <Input
                   id="c_bus"
                   type="number"
@@ -689,11 +691,11 @@ export function BusStopOptimizer() {
                   min={1}
                   max={100}
                 />
-                <p className="text-xs text-muted-foreground">Số học sinh tối đa mỗi xe buýt</p>
+                <p className="text-xs text-muted-foreground">{t("optimize.busCapacityDesc")}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max_stops">Số điểm dừng tối đa (tùy chọn)</Label>
+                <Label htmlFor="max_stops">{t("optimize.maxStops")}</Label>
                 <Input
                   id="max_stops"
                   type="number"
@@ -705,28 +707,34 @@ export function BusStopOptimizer() {
                     })
                   }
                   min={1}
-                  placeholder="Không giới hạn"
+                  placeholder={t("optimize.noLimit")}
                 />
-                <p className="text-xs text-muted-foreground">Để trống nếu không giới hạn</p>
+                <p className="text-xs text-muted-foreground">{t("optimize.maxStopsDesc")}</p>
               </div>
 
               <Separator />
 
               <div className="space-y-2">
-                <Label>Thông tin trường học</Label>
-                <div className="p-3 bg-muted rounded-md">
-                  <p className="font-semibold text-sm">Đại Học Sài Gòn</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    273 An Dương Vương, Phường Chợ Quán, Thành phố Hồ Chí Minh 700000
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Tọa độ: {params.school_location.lat.toFixed(6)}, {params.school_location.lng.toFixed(6)}
-                </p>
+                <Label htmlFor="school_lat">{t("optimize.schoolLat")}</Label>
+                <Input
+                  id="school_lat"
+                  type="number"
+                  step="0.000001"
+                  value={params.school_location.lat}
+                  onChange={(e) =>
+                    setParams({
+                      ...params,
+                      school_location: {
+                        ...params.school_location,
+                        lat: parseFloat(e.target.value) || 10.77653,
+                      },
+                    })
+                  }
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max_distance_from_school">Khoảng cách tối đa từ trường (mét)</Label>
+                <Label htmlFor="school_lng">{t("optimize.schoolLng")}</Label>
                 <Input
                   id="max_distance_from_school"
                   type="number"
@@ -760,31 +768,11 @@ export function BusStopOptimizer() {
                     className="rounded"
                   />
                   <Label htmlFor="use_roads_api" className="cursor-pointer">
-                    Sử dụng Roads API
+                    {t("optimize.useRoadsAPI")}
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground ml-6">
-                  Snap điểm dừng lên đường lớn
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="use_places_api"
-                    checked={params.use_places_api}
-                    onChange={(e) =>
-                      setParams({ ...params, use_places_api: e.target.checked })
-                    }
-                    className="rounded"
-                  />
-                  <Label htmlFor="use_places_api" className="cursor-pointer">
-                    Sử dụng Places API
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground ml-6">
-                  Tìm địa điểm dễ nhận diện
+                  {t("optimize.useRoadsAPIDesc")}
                 </p>
               </div>
 
@@ -805,12 +793,12 @@ export function BusStopOptimizer() {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Đang tối ưu hóa...
+                    {t("common.loading")}
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4 mr-2" />
-                    Chạy Tối Ưu Hóa
+                    {t("optimize.runOptimization")}
                   </>
                 )}
               </Button>
@@ -874,7 +862,7 @@ export function BusStopOptimizer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Kết Quả
+                {t("optimize.results")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -884,33 +872,33 @@ export function BusStopOptimizer() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="p-4 border rounded-lg">
                         <div className="text-2xl font-bold">{fullResult.summary.totalStops}</div>
-                        <div className="text-sm text-muted-foreground">Điểm dừng</div>
+                        <div className="text-sm text-muted-foreground">{t("routes.stops")}</div>
                       </div>
                       <div className="p-4 border rounded-lg">
                         <div className="text-2xl font-bold">{fullResult.summary.totalRoutes}</div>
-                        <div className="text-sm text-muted-foreground">Tuyến xe</div>
+                        <div className="text-sm text-muted-foreground">{t("routes.title")}</div>
                       </div>
                       {routesCreated && (
                         <div className="p-4 border rounded-lg bg-green-50">
                           <div className="text-2xl font-bold text-green-600">{routesCreated.stats.totalRoutes}</div>
-                          <div className="text-sm text-muted-foreground">Tuyến đã tạo</div>
+                          <div className="text-sm text-muted-foreground">{t("routes.title")}</div>
                         </div>
                       )}
                       {schedulesCreated && (
                         <div className="p-4 border rounded-lg bg-blue-50">
                           <div className="text-2xl font-bold text-blue-600">{schedulesCreated.stats.totalSchedules}</div>
-                          <div className="text-sm text-muted-foreground">Lịch trình đã tạo</div>
+                          <div className="text-sm text-muted-foreground">{t("schedule.title")}</div>
                         </div>
                       )}
                       <div className="p-4 border rounded-lg">
                         <div className="text-2xl font-bold">{fullResult.summary.totalStudents}</div>
-                        <div className="text-sm text-muted-foreground">Học sinh</div>
+                        <div className="text-sm text-muted-foreground">{t("reports.students")}</div>
                       </div>
                       <div className="p-4 border rounded-lg">
                         <div className="text-2xl font-bold">
                           {fullResult.summary.averageStudentsPerStop}
                         </div>
-                        <div className="text-sm text-muted-foreground">HS/Điểm dừng</div>
+                        <div className="text-sm text-muted-foreground">{t("reports.students")}/{t("routes.stops")}</div>
                       </div>
                     </div>
 
@@ -989,7 +977,7 @@ export function BusStopOptimizer() {
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
                     <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Chưa có kết quả. Nhấn "Chạy Tối Ưu Hóa" để bắt đầu.</p>
+                    <p>{t("optimize.noResults")}</p>
                   </div>
                 )}
               </TabsContent>

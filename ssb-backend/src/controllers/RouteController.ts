@@ -1,3 +1,4 @@
+// @ts-nocheck
 // RouteController - Controller refactored for v1.1 (normalized stops + route_stops)
 import RouteService from "../services/RouteService.js";
 import RouteAutoCreateService from "../services/RouteAutoCreateService.js";

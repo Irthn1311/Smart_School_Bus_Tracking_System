@@ -19,7 +19,14 @@ INSERT INTO NguoiDung (hoTen, email, matKhau, soDienThoai, vaiTro) VALUES
 ('Phạm Văn Đức', 'taixe4@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000008', 'tai_xe'),
 ('Võ Thành Long', 'taixe5@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000009', 'tai_xe'),
 ('Ngô Văn Sơn', 'taixe6@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000010', 'tai_xe'),
-('Bùi Văn Kiên', 'taixe7@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000011', 'tai_xe');
+('Bùi Văn Kiên', 'taixe7@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000011', 'tai_xe'),
+('Vũ Văn Thanh',    'taixe08@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000021', 'tai_xe'),
+('Nguyễn Tuấn Anh', 'taixe09@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000022', 'tai_xe'),
+('Phan Văn Đức',    'taixe10@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000023', 'tai_xe'),
+('Đỗ Hùng Dũng',    'taixe11@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000024', 'tai_xe'),
+('Quế Ngọc Hải',    'taixe12@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000025', 'tai_xe'),
+('Bùi Tiến Dũng',   'taixe13@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000026', 'tai_xe'),
+('Nguyễn Quang Hải','taixe14@schoolbus.vn', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0909000027', 'tai_xe');
 
 INSERT INTO TaiXe (maTaiXe, tenTaiXe, soBangLai, ngayHetHanBangLai, soNamKinhNghiem, trangThai) VALUES
 (2, 'Trần Văn Tài', 'B2-123456789', '2028-05-20', 5, 'hoat_dong'),
@@ -28,7 +35,14 @@ INSERT INTO TaiXe (maTaiXe, tenTaiXe, soBangLai, ngayHetHanBangLai, soNamKinhNgh
 (5, 'Phạm Văn Đức', 'B2-789123456', '2028-08-10', 6, 'hoat_dong'),
 (6, 'Võ Thành Long', 'B2-321654987', '2029-01-25', 4, 'hoat_dong'),
 (7, 'Ngô Văn Sơn', 'B2-654987321', '2027-11-30', 7, 'hoat_dong'),
-(8, 'Bùi Văn Kiên', 'B2-147258369', '2028-06-15', 5, 'hoat_dong');
+(8, 'Bùi Văn Kiên', 'B2-147258369', '2028-06-15', 5, 'hoat_dong'),
+(9, 'Vũ Văn Thanh',    'B2-888111222', '2029-05-20', 6, 'hoat_dong'),
+(10, 'Nguyễn Tuấn Anh', 'B2-888333444', '2028-11-15', 4, 'hoat_dong'),
+(11, 'Phan Văn Đức',    'B2-888555666', '2030-01-10', 5, 'hoat_dong'),
+(12, 'Đỗ Hùng Dũng',    'B2-888777888', '2027-08-22', 7, 'hoat_dong'),
+(13, 'Quế Ngọc Hải',    'B2-888999000', '2028-12-30', 8, 'hoat_dong'),
+(14, 'Bùi Tiến Dũng',   'B2-888000111', '2029-07-07', 3, 'hoat_dong'),
+(15, 'Nguyễn Quang Hải','B2-888222333', '2030-04-12', 4, 'hoat_dong');
 
 -- =================================================================
 -- KHỐI 2: XE BUÝT
@@ -42,7 +56,14 @@ INSERT INTO XeBuyt (bienSoXe, dongXe, sucChua, trangThai) VALUES
 ('51E-33333', 'Thaco Town', 28, 'hoat_dong'),
 ('51F-44444', 'Isuzu NPR', 35, 'hoat_dong'),
 ('51G-55555', 'Hyundai County', 30, 'bao_tri'),
-('51H-66666', 'Thaco Town', 28, 'hoat_dong');
+('51H-66666', 'Thaco Town', 28, 'hoat_dong'),
+('51B-301.12', 'Samco Felix', 34, 'hoat_dong'),
+('51B-302.25', 'Thaco Garden 79s', 29, 'hoat_dong'),
+('51B-303.38', 'Hyundai Solati', 16, 'hoat_dong'),
+('51B-304.41', 'Ford Transit', 16, 'bao_tri'), 
+('51B-305.56', 'Thaco Meadow 85s', 29, 'hoat_dong'),
+('51B-306.69', 'Hyundai New County', 29, 'hoat_dong'),
+('51B-307.72', 'Toyota Hiace', 16, 'hoat_dong');
 
 -- =================================================================
 -- KHỐI 3: LẦN 1 - HỌC SINH 1-10 (QUẬN 7)

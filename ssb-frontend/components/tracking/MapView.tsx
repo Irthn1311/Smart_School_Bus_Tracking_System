@@ -66,7 +66,7 @@ export function MapView({
 }: MapViewProps) {
   // Convert buses to BusMarker format (memoized to avoid new references every render)
   const busMarkers = React.useMemo<BusMarker[]>(() => {
-    return buses.map((b) => ({
+    const markers = buses.map((b) => ({
       id: b.id,
       lat: b.lat,
       lng: b.lng,
@@ -74,6 +74,7 @@ export function MapView({
       status: b.status as "running" | "idle" | "late" | "incident",
       heading: b.heading,
     }));
+    return markers;
   }, [buses]);
 
   // Convert stops to StopDTO format (memoized)
@@ -123,6 +124,8 @@ export function MapView({
       lastDataRef.current = busMarkers;
       lastUpdateRef.current = now;
       setThrottledBuses(busMarkers);
+    } else {
+      // Throttled
     }
   }, [busMarkers, hasBusDataChanged]);
 
@@ -164,6 +167,9 @@ export function MapView({
       </CardHeader>
       <CardContent>
         <div className="relative">
+          {(() => {
+            return null;
+          })()}
           <SSBMap
             height={height}
             center={center}

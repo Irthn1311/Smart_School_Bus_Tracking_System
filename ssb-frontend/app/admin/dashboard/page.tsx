@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/language-context"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
@@ -33,6 +34,7 @@ import {
 
 export default function AdminDashboard() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -116,8 +118,8 @@ export default function AdminDashboard() {
       } catch (e: any) {
         console.error(e)
         toast({
-          title: "Lỗi",
-          description: e?.message || "Không tải được thống kê",
+          title: t("common.error"),
+          description: e?.message || t("dashboard.loadError"),
           variant: "destructive",
         })
       } finally {
@@ -147,8 +149,8 @@ export default function AdminDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard Thống Kê</h1>
-            <p className="text-muted-foreground mt-1">Theo dõi hiệu suất và phân tích dữ liệu</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("dashboard.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("dashboard.description")}</p>
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -181,12 +183,12 @@ export default function AdminDashboard() {
         {/* Filters */}
         <Card>
           <CardHeader>
-            <CardTitle>Bộ lọc</CardTitle>
+            <CardTitle>{t("dashboard.filters")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="space-y-2">
-                <Label>Từ ngày</Label>
+                <Label>{t("dashboard.fromDate")}</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -194,7 +196,7 @@ export default function AdminDashboard() {
                       className={cn("w-full justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateFrom ? format(dateFrom, "PPP", { locale: vi }) : "Chọn ngày"}
+                      {dateFrom ? format(dateFrom, "PPP", { locale: vi }) : t("dashboard.selectDate")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
@@ -203,7 +205,7 @@ export default function AdminDashboard() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label>Đến ngày</Label>
+                <Label>{t("dashboard.toDate")}</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -211,7 +213,7 @@ export default function AdminDashboard() {
                       className={cn("w-full justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateTo ? format(dateTo, "PPP", { locale: vi }) : "Chọn ngày"}
+                      {dateTo ? format(dateTo, "PPP", { locale: vi }) : t("dashboard.selectDate")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
@@ -220,13 +222,13 @@ export default function AdminDashboard() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label>Tuyến đường</Label>
+                <Label>{t("dashboard.route")}</Label>
                 <Select value={routeId} onValueChange={setRouteId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
+                    <SelectValue placeholder={t("common.all")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="">{t("common.all")}</SelectItem>
                     {routes.map((r: any) => (
                       <SelectItem key={r.maTuyen || r.id} value={String(r.maTuyen || r.id)}>
                         {r.tenTuyen || r.name}
@@ -236,13 +238,13 @@ export default function AdminDashboard() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Tài xế</Label>
+                <Label>{t("dashboard.driver")}</Label>
                 <Select value={driverId} onValueChange={setDriverId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
+                    <SelectValue placeholder={t("common.all")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="">{t("common.all")}</SelectItem>
                     {drivers.map((d: any) => (
                       <SelectItem key={d.maTaiXe || d.id} value={String(d.maTaiXe || d.id)}>
                         {d.hoTen || d.name}
@@ -252,13 +254,13 @@ export default function AdminDashboard() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Xe buýt</Label>
+                <Label>{t("dashboard.bus")}</Label>
                 <Select value={busId} onValueChange={setBusId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
+                    <SelectValue placeholder={t("common.all")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="">{t("common.all")}</SelectItem>
                     {buses.map((b: any) => (
                       <SelectItem key={b.maXe || b.id} value={String(b.maXe || b.id)}>
                         {b.bienSoXe || b.plateNumber}
@@ -286,49 +288,49 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Tỷ lệ hoàn thành</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("dashboard.completionRate")}</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overview.completionRate}%</div>
                 <p className="text-xs text-muted-foreground">
-                  {overview.tripsCompleted} / {overview.totalTrips} chuyến
+                  {overview.tripsCompleted} / {overview.totalTrips} {t("dashboard.trips")}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Trễ trung bình (P50)</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("dashboard.avgDelay")}</CardTitle>
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{overview.avgDelayMinutes?.p50 || 0} phút</div>
+                <div className="text-2xl font-bold">{overview.avgDelayMinutes?.p50 || 0} {t("dashboard.minutes")}</div>
                 <p className="text-xs text-muted-foreground">
-                  P95: {overview.avgDelayMinutes?.p95 || 0} phút
+                  P95: {overview.avgDelayMinutes?.p95 || 0} {t("dashboard.minutes")}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Cảnh báo trễ</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("dashboard.delayAlerts")}</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overview.delayAlerts || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  Sự kiện đến gần: {overview.approachStopEvents || 0}
+                  {t("dashboard.approachEvents")}: {overview.approachStopEvents || 0}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Hoạt động</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("dashboard.activity")}</CardTitle>
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overview.activeDrivers || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  Tài xế / {overview.activeBuses || 0} xe
+                  {t("dashboard.drivers")} / {overview.activeBuses || 0} {t("dashboard.buses")}
                 </p>
               </CardContent>
             </Card>
@@ -340,7 +342,7 @@ export default function AdminDashboard() {
           {/* Trips by Day */}
           <Card>
             <CardHeader>
-              <CardTitle>Chuyến theo ngày</CardTitle>
+              <CardTitle>{t("dashboard.tripsByDay")}</CardTitle>
             </CardHeader>
             <CardContent>
               {tripsByDay.length > 0 ? (
@@ -351,14 +353,14 @@ export default function AdminDashboard() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="planned" stroke="#8884d8" name="Dự kiến" />
-                    <Line type="monotone" dataKey="completed" stroke="#82ca9d" name="Hoàn thành" />
-                    <Line type="monotone" dataKey="avgDelayMinutes" stroke="#ffc658" name="Trễ TB (phút)" />
+                    <Line type="monotone" dataKey="planned" stroke="#8884d8" name={t("dashboard.planned")} />
+                    <Line type="monotone" dataKey="completed" stroke="#82ca9d" name={t("dashboard.completed")} />
+                    <Line type="monotone" dataKey="avgDelayMinutes" stroke="#ffc658" name={t("dashboard.avgDelay")} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  Không có dữ liệu
+                  {t("dashboard.noData")}
                 </div>
               )}
             </CardContent>
@@ -367,7 +369,7 @@ export default function AdminDashboard() {
           {/* Driver Performance */}
           <Card>
             <CardHeader>
-              <CardTitle>Hiệu suất tài xế</CardTitle>
+              <CardTitle>{t("dashboard.driverPerformance")}</CardTitle>
             </CardHeader>
             <CardContent>
               {driverPerformance.length > 0 ? (
@@ -378,13 +380,13 @@ export default function AdminDashboard() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="completionRate" fill="#8884d8" name="Tỷ lệ hoàn thành (%)" />
-                    <Bar dataKey="avgDelay" fill="#82ca9d" name="Trễ TB (phút)" />
+                    <Bar dataKey="completionRate" fill="#8884d8" name={`${t("dashboard.completionRate")} (%)`} />
+                    <Bar dataKey="avgDelay" fill="#82ca9d" name={`${t("dashboard.avgDelay")} (${t("dashboard.minutes")})`} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  Không có dữ liệu
+                  {t("dashboard.noData")}
                 </div>
               )}
             </CardContent>
@@ -393,7 +395,7 @@ export default function AdminDashboard() {
           {/* Bus Utilization */}
           <Card>
             <CardHeader>
-              <CardTitle>Sử dụng xe buýt</CardTitle>
+              <CardTitle>{t("dashboard.busUtilization")}</CardTitle>
             </CardHeader>
             <CardContent>
               {busUtilization.length > 0 ? (
@@ -404,12 +406,12 @@ export default function AdminDashboard() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="trips" fill="#8884d8" name="Số chuyến" />
+                    <Bar dataKey="trips" fill="#8884d8" name={t("dashboard.trips")} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  Không có dữ liệu
+                  {t("dashboard.noData")}
                 </div>
               )}
             </CardContent>
@@ -418,7 +420,7 @@ export default function AdminDashboard() {
           {/* Route Punctuality */}
           <Card>
             <CardHeader>
-              <CardTitle>Đúng giờ theo tuyến</CardTitle>
+              <CardTitle>{t("dashboard.routePunctuality")}</CardTitle>
             </CardHeader>
             <CardContent>
               {routePunctuality.length > 0 ? (
@@ -429,13 +431,13 @@ export default function AdminDashboard() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="onTimeRate" fill="#82ca9d" name="Tỷ lệ đúng giờ (%)" />
-                    <Bar dataKey="avgStopDelay" fill="#ffc658" name="Trễ TB (phút)" />
+                    <Bar dataKey="onTimeRate" fill="#82ca9d" name={`${t("dashboard.onTimeRate")} (%)`} />
+                    <Bar dataKey="avgStopDelay" fill="#ffc658" name={`${t("dashboard.avgDelay")} (${t("dashboard.minutes")})`} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  Không có dữ liệu
+                  {t("dashboard.noData")}
                 </div>
               )}
             </CardContent>

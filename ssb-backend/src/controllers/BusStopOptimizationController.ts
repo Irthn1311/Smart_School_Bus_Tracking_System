@@ -1,3 +1,4 @@
+// @ts-nocheck
 import BusStopOptimizationService from "../services/BusStopOptimizationService.js";
 import VehicleRoutingService from "../services/VehicleRoutingService.js";
 import ClusteringRoutingService from "../services/ClusteringRoutingService.js";

@@ -1,5 +1,5 @@
 import express from "express";
-import DriverController from "../../controllers/DriverController.js";
+import DriverController from "../../controllers/DriverController.ts";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 

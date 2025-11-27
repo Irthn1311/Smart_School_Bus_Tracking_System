@@ -104,13 +104,20 @@ export function DriverForm({ onClose, onCreated, mode = "create", initial }: Dri
     try {
       setSubmitting(true)
 
+      // Map status to backend-accepted values
+      const normalizedStatus = ((): string => {
+        if (status === "tam_nghi") return "ngung_hoat_dong"
+        if (status === "nghi_huu") return "ngung_hoat_dong"
+        return "hoat_dong"
+      })()
+
       const driverData: any = {
         hoTen: name.trim(),
         email: email.trim(),
         soDienThoai: phone.trim(),
         soBangLai: license.trim(),
         soNamKinhNghiem: parseInt(experience) || 0,
-        trangThai: status,
+        trangThai: normalizedStatus,
       }
 
       if (licenseExpiry) {
@@ -120,6 +127,8 @@ export function DriverForm({ onClose, onCreated, mode = "create", initial }: Dri
       if (mode === "create") {
         driverData.matKhau = password
         driverData.vaiTro = "tai_xe"
+      } else if (mode === "edit" && password) {
+        driverData.matKhau = password
       }
 
       if (mode === "edit" && initial?.id) {
@@ -199,10 +208,10 @@ export function DriverForm({ onClose, onCreated, mode = "create", initial }: Dri
             />
           </div>
 
-          {mode === "create" && (
+          {(mode === "create" || mode === "edit") && (
             <div className="space-y-2">
               <Label htmlFor="password">
-                Mật khẩu <span className="text-destructive">*</span>
+                Mật khẩu {mode === "create" ? <span className="text-destructive">*</span> : null}
               </Label>
               <div className="relative">
                 <Input
@@ -211,7 +220,7 @@ export function DriverForm({ onClose, onCreated, mode = "create", initial }: Dri
                   placeholder="Nhập mật khẩu"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
+                  required={mode === "create"}
                 />
                 <Button
                   type="button"
@@ -227,7 +236,9 @@ export function DriverForm({ onClose, onCreated, mode = "create", initial }: Dri
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Mật khẩu sẽ được sử dụng để đăng nhập</p>
+              <p className="text-xs text-muted-foreground">
+                {mode === "create" ? "Mật khẩu sẽ được sử dụng để đăng nhập" : "Để trống nếu không muốn đổi mật khẩu"}
+              </p>
             </div>
           )}
         </div>

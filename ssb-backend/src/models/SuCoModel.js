@@ -3,12 +3,40 @@ import pool from "../config/db.js";
 class SuCoModel {
   // Tạo báo cáo sự cố mới
   async create(data) {
-    const { maChuyen, moTa, mucDo = "nhe", trangThai = "moi" } = data;
+    const { 
+      maChuyen, 
+      moTa, 
+      mucDo = "nhe", 
+      trangThai = "moi",
+      loaiSuCo,
+      viTri,
+      hocSinhLienQuan, // array of student IDs
+      thoiGianBao // timestamp from client
+    } = data;
 
+    console.log('🔍 [SuCoModel.create] Creating incident:', { maChuyen, mucDo, loaiSuCo, viTri, thoiGianBao, hocSinhCount: hocSinhLienQuan?.length });
+
+    // Use timestamp from client (or fallback to current time)
+    // Convert ISO string to MySQL datetime format: YYYY-MM-DD HH:MM:SS
+    let timestamp;
+    if (thoiGianBao) {
+      try {
+        const date = new Date(thoiGianBao);
+        timestamp = date.toISOString().slice(0, 19).replace('T', ' ');
+      } catch (err) {
+        console.error('🔍 [SuCoModel.create] Invalid thoiGianBao format:', thoiGianBao, err);
+        timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      }
+    } else {
+      timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+    
+    console.log('🔍 [SuCoModel.create] Using timestamp:', timestamp);
+    
     const [result] = await pool.query(
       `INSERT INTO SuCo (maChuyen, moTa, thoiGianBao, mucDo, trangThai)
-       VALUES (?, ?, NOW(), ?, ?)`,
-      [maChuyen, moTa, mucDo, trangThai]
+       VALUES (?, ?, ?, ?, ?)`,
+      [maChuyen, moTa, timestamp, mucDo, trangThai]
     );
 
     return {

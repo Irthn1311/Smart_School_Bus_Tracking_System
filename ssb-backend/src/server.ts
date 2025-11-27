@@ -46,6 +46,7 @@ import stopRoutes from "./routes/api/stop.js"; // Stops routes
 import statsRoutes from "./routes/api/stats.route.js"; // M7: Stats routes
 import settingsRoutes from "./routes/api/settings.route.js"; // M8: Settings routes
 import busStopOptimizationRoutes from "./routes/api/bus-stop-optimization.route.js"; // Bus Stop Optimization routes
+import telemetryRoutes from "./routes/api/telemetry.route.js"; // GPS & Telemetry routes
 
 // Create Express app
 const app = express();
@@ -199,7 +200,7 @@ app.use(`${API_PREFIX}/drivers`, driverRoutes);
 
 // Student routes
 app.use(`${API_PREFIX}/students`, studentRoutes);
-
+app.use("/api", telemetryRoutes); // Telemetry: POST /api/trips/:id/telemetry
 app.use(`${API_PREFIX}/trips`, tripRoutes);
 app.use(`${API_PREFIX}/schedules`, scheduleRoutes);
 app.use(`${API_PREFIX}/routes`, routeRoutes);

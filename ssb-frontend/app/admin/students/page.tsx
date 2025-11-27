@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -44,6 +45,7 @@ type Student = {
 }
 
 export default function StudentsPage() {
+  const { t } = useLanguage()
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const debouncedSearch = useDebounce(searchQuery, 300)
@@ -126,11 +128,11 @@ export default function StudentsPage() {
       })
       setAvailableClasses(Array.from(classes).sort())
     } catch (e: any) {
-      setError(e?.message || "Không lấy được danh sách học sinh")
+      setError(e?.message || t("students.loadError"))
       console.error("Lỗi khi lấy danh sách học sinh:", e)
       toast({
-        title: "Lỗi",
-        description: e?.message || "Không thể tải danh sách học sinh",
+        title: t("common.error"),
+        description: e?.message || t("students.loadErrorDesc"),
         variant: "destructive",
       })
     } finally {
@@ -192,20 +194,20 @@ export default function StudentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Quản lý Học sinh</h1>
-            <p className="text-muted-foreground mt-1">Quản lý thông tin học sinh và phụ huynh</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("students.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("students.description")}</p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90">
                 <Plus className="w-4 h-4 mr-2" />
-                Thêm học sinh
+                {t("students.addNew")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Thêm học sinh mới</DialogTitle>
-                <DialogDescription>Nhập thông tin học sinh và phụ huynh</DialogDescription>
+                <DialogTitle>{t("students.addNew")}</DialogTitle>
+                <DialogDescription>{t("students.description")}</DialogDescription>
               </DialogHeader>
               <StudentForm
                 onClose={() => setIsAddDialogOpen(false)}
@@ -219,8 +221,8 @@ export default function StudentsPage() {
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Chỉnh sửa học sinh</DialogTitle>
-                <DialogDescription>Cập nhật thông tin học sinh và phụ huynh</DialogDescription>
+              <DialogTitle>{t("students.edit")}</DialogTitle>
+              <DialogDescription>{t("students.description")}</DialogDescription>
               </DialogHeader>
               <StudentForm
                 mode="edit"
@@ -266,7 +268,7 @@ export default function StudentsPage() {
               <div className="text-2xl font-bold text-foreground">
                 {statsLoading ? "..." : (stats?.total || 0)}
               </div>
-              <p className="text-sm text-muted-foreground">Tổng học sinh</p>
+              <p className="text-sm text-muted-foreground">{t("students.total")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
@@ -274,7 +276,7 @@ export default function StudentsPage() {
               <div className="text-2xl font-bold text-success">
                 {statsLoading ? "..." : (stats?.withParent || 0)}
               </div>
-              <p className="text-sm text-muted-foreground">Có phụ huynh</p>
+              <p className="text-sm text-muted-foreground">{t("students.withParent")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
@@ -282,7 +284,7 @@ export default function StudentsPage() {
               <div className="text-2xl font-bold text-warning">
                 {statsLoading ? "..." : (stats?.withoutParent || 0)}
               </div>
-              <p className="text-sm text-muted-foreground">Chưa có phụ huynh</p>
+              <p className="text-sm text-muted-foreground">{t("students.withoutParent")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
@@ -290,7 +292,7 @@ export default function StudentsPage() {
               <div className="text-2xl font-bold text-primary">
                 {statsLoading ? "..." : (stats?.averageAge || 0)}
               </div>
-              <p className="text-sm text-muted-foreground">Tuổi trung bình</p>
+              <p className="text-sm text-muted-foreground">{t("students.avgAge")}</p>
             </CardContent>
           </Card>
         </div>
@@ -299,12 +301,12 @@ export default function StudentsPage() {
         <Card className="border-border/50">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Danh sách học sinh</CardTitle>
+              <CardTitle>{t("students.list")}</CardTitle>
               <div className="flex items-center gap-2">
                 <div className="relative w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Tìm theo tên, lớp, phụ huynh..."
+                    placeholder={t("students.search")}
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value)
@@ -319,10 +321,10 @@ export default function StudentsPage() {
                 }}>
                   <SelectTrigger className="w-[180px]">
                     <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Tất cả lớp" />
+                    <SelectValue placeholder={t("students.allClasses")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả lớp</SelectItem>
+                    <SelectItem value="all">{t("students.allClasses")}</SelectItem>
                     {availableClasses.map((cls) => (
                       <SelectItem key={cls} value={cls}>
                         {cls}
@@ -347,7 +349,7 @@ export default function StudentsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {loading && <div className="py-8 text-center text-muted-foreground">Đang tải danh sách học sinh...</div>}
+            {loading && <div className="py-8 text-center text-muted-foreground">{t("students.loading")}</div>}
             {error && (
               <div className="py-8 text-center text-destructive">
                 {error}
@@ -355,7 +357,7 @@ export default function StudentsPage() {
             )}
             {!loading && !error && students.length === 0 && (
               <div className="py-8 text-center text-muted-foreground">
-                Không tìm thấy học sinh nào
+                {t("students.noResults")}
               </div>
             )}
             {!loading && !error && students.length > 0 && (
@@ -363,13 +365,13 @@ export default function StudentsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Học sinh</TableHead>
-                      <TableHead>Lớp</TableHead>
-                      <TableHead>Ngày sinh</TableHead>
-                      <TableHead>Phụ huynh</TableHead>
-                      <TableHead>Địa chỉ</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead className="text-right">Thao tác</TableHead>
+                      <TableHead>{t("students.student")}</TableHead>
+                      <TableHead>{t("students.class")}</TableHead>
+                      <TableHead>{t("students.birthDate")}</TableHead>
+                      <TableHead>{t("students.parent")}</TableHead>
+                      <TableHead>{t("students.address")}</TableHead>
+                      <TableHead>{t("students.status")}</TableHead>
+                      <TableHead className="text-right">{t("students.actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -409,7 +411,7 @@ export default function StudentsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-sm text-muted-foreground">Chưa có</span>
+                            <span className="text-sm text-muted-foreground">{t("students.noParent")}</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -433,7 +435,7 @@ export default function StudentsPage() {
                                 : "border-muted text-muted-foreground"
                             }
                           >
-                            {student.status ? "Hoạt động" : "Ngừng hoạt động"}
+                            {student.status ? t("common.active") : t("students.inactive")}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">

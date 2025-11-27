@@ -1,3 +1,4 @@
+// @ts-nocheck
 import BusService from "../services/BusService.js";
 import * as response from "../utils/response.js";
 

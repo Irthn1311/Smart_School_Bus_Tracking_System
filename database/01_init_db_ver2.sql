@@ -18,6 +18,7 @@ DROP TABLE IF EXISTS student_stop_suggestions;
 DROP TABLE IF EXISTS trip_stop_status;
 DROP TABLE IF EXISTS schedule_student_stops;
 DROP TABLE IF EXISTS TrangThaiHocSinh;
+DROP TABLE IF EXISTS SuCo_HocSinh;
 DROP TABLE IF EXISTS SuCo;
 DROP TABLE IF EXISTS ThongBao;
 DROP TABLE IF EXISTS ChuyenDi;

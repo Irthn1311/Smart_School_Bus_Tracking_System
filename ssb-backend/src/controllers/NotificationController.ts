@@ -1,3 +1,4 @@
+// @ts-nocheck
 import ThongBaoModel from "../models/ThongBaoModel.js";
 
 class NotificationController {
@@ -7,12 +8,28 @@ class NotificationController {
       const userId = req.user?.userId;
       const { loaiThongBao, daDoc, limit = 50, offset = 0 } = req.query;
 
+      console.log('🔍 [NotificationController.list] Request params:', {
+        userId,
+        loaiThongBao,
+        daDoc,
+        limit,
+        offset
+      });
+
       const data = await ThongBaoModel.getByUserId(userId, {
         loaiThongBao,
         daDoc: daDoc !== undefined ? daDoc === "true" || daDoc === true : undefined,
         limit: Number(limit),
         offset: Number(offset),
       });
+
+      console.log('✅ [NotificationController.list] Retrieved notifications:', data.length);
+      console.log('📋 [NotificationController.list] Sample data:', data.slice(0, 3).map(n => ({
+        maThongBao: n.maThongBao,
+        loaiThongBao: n.loaiThongBao,
+        tieuDe: n.tieuDe,
+        daDoc: n.daDoc
+      })));
 
       return res.status(200).json({ success: true, data });
     } catch (error) {

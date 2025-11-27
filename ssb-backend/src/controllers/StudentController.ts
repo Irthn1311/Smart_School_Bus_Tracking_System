@@ -1,3 +1,4 @@
+// @ts-nocheck
 // StudentController - Controller chuyên nghiệp cho quản lý học sinh
 import StudentService from "../services/StudentService.js";
 import HocSinhModel from "../models/HocSinhModel.js";

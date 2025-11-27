@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useLanguage } from "@/lib/language-context"
 import { cn } from "@/lib/utils"
 import {
   Bus,
@@ -18,29 +19,30 @@ import {
   Zap,
 } from "lucide-react"
 
-const managementNav = [
-  { name: "Tổng quan", href: "/admin", icon: LayoutDashboard },
-  { name: "Quản lý Xe buýt", href: "/admin/buses", icon: Bus },
-  { name: "Quản lý Tài xế", href: "/admin/drivers", icon: UserCircle },
-  { name: "Quản lý Học sinh", href: "/admin/students", icon: Users },
-  { name: "Tối ưu hóa Điểm dừng", href: "/admin/bus-stop-optimization", icon: Zap },
-  { name: "Quản lý Tuyến đường", href: "/admin/routes", icon: Route },
-  { name: "Lịch trình & Phân công", href: "/admin/schedule", icon: Calendar },
-]
-
-const monitoringNav = [
-  { name: "Theo dõi Real-time", href: "/admin/tracking", icon: MapPin },
-  { name: "Thông báo & Cảnh báo", href: "/admin/notifications", icon: Bell },
-  { name: "Báo cáo & Thống kê", href: "/admin/reports", icon: BarChart3 },
-]
-
-const personalNav = [
-  { name: "Hồ sơ cá nhân", href: "/admin/profile", icon: ShieldCheck },
-  { name: "Cài đặt hệ thống", href: "/admin/settings", icon: Settings },
-]
-
 export function AdminSidebar() {
   const pathname = usePathname()
+  const { t } = useLanguage()
+
+  const managementNav = [
+    { name: t("sidebar.overview"), href: "/admin", icon: LayoutDashboard },
+    { name: t("sidebar.busManagement"), href: "/admin/buses", icon: Bus },
+    { name: t("sidebar.driverManagement"), href: "/admin/drivers", icon: UserCircle },
+    { name: t("sidebar.studentManagement"), href: "/admin/students", icon: Users },
+    { name: t("sidebar.optimizeStops"), href: "/admin/bus-stop-optimization", icon: Zap },
+    { name: t("sidebar.routeManagement"), href: "/admin/routes", icon: Route },
+    { name: t("sidebar.scheduleAssignment"), href: "/admin/schedule", icon: Calendar },
+  ]
+
+  const monitoringNav = [
+    { name: t("sidebar.realtimeTracking"), href: "/admin/tracking", icon: MapPin },
+    { name: t("sidebar.notificationsAlerts"), href: "/admin/notifications", icon: Bell },
+    { name: t("sidebar.reportsStatistics"), href: "/admin/reports", icon: BarChart3 },
+  ]
+
+  const personalNav = [
+    { name: t("sidebar.personalProfile"), href: "/admin/profile", icon: ShieldCheck },
+    { name: t("sidebar.systemSettings"), href: "/admin/settings", icon: Settings },
+  ]
 
   return (
     
@@ -53,7 +55,7 @@ export function AdminSidebar() {
           </div>
           <div>
             <h2 className="font-bold text-foreground">SSB 1.0</h2>
-            <p className="text-xs text-muted-foreground">Admin Panel</p>
+            <p className="text-xs text-muted-foreground">{t("sidebar.adminPanel")}</p>
           </div>
         </div>
       </div>
@@ -63,7 +65,7 @@ export function AdminSidebar() {
         {/* Quản lý */}
         <div>
           <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Quản lý
+            {t("sidebar.management")}
           </p>
           <div className="space-y-1">
             {managementNav.map((item) => {
@@ -90,7 +92,7 @@ export function AdminSidebar() {
         {/* Giám sát */}
         <div>
           <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Giám sát & Báo cáo
+            {t("sidebar.monitoring")}
           </p>
           <div className="space-y-1">
             {monitoringNav.map((item) => {
@@ -117,7 +119,7 @@ export function AdminSidebar() {
         {/* Cá nhân */}
         <div>
           <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Cá nhân
+            {t("sidebar.personal")}
           </p>
           <div className="space-y-1">
             {personalNav.map((item) => {

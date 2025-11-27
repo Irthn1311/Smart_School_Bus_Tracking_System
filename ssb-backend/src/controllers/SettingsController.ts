@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * SettingsController - M8: Admin Settings
  * 

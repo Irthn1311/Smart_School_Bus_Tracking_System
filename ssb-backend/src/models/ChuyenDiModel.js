@@ -514,6 +514,27 @@ const ChuyenDiModel = {
     );
     return rows[0];
   },
+
+  /**
+   * Lấy chuyến đi đang hoạt động của xe buýt (để check delay)
+   * @param {number} maXe - Mã xe buýt
+   * @returns {Promise<Object|null>} Chuyến đi active hoặc null
+   */
+  async getActiveByBusId(maXe) {
+    const [rows] = await pool.query(
+      `SELECT cd.*, lt.gioKhoiHanh, lt.maTuyen, td.tenTuyen
+       FROM ChuyenDi cd
+       INNER JOIN LichTrinh lt ON cd.maLichTrinh = lt.maLichTrinh
+       INNER JOIN TuyenDuong td ON lt.maTuyen = td.maTuyen
+       WHERE lt.maXe = ? 
+       AND cd.trangThai IN ('cho_khoi_hanh', 'dang_chay')
+       AND DATE(cd.ngayChay) = CURDATE()
+       ORDER BY cd.ngayChay DESC, lt.gioKhoiHanh DESC
+       LIMIT 1`,
+      [maXe]
+    );
+    return rows[0] || null;
+  },
 };
 
 export default ChuyenDiModel;

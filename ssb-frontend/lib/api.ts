@@ -83,15 +83,24 @@ class ApiClient {
       ).Authorization = `Bearer ${this.token}`;
     }
 
-    const doFetch = async (): Promise<{ ok: boolean; status: number; json: any }> => {
+    const doFetch = async (): Promise<{
+      ok: boolean;
+      status: number;
+      json: any;
+    }> => {
       try {
         const resp = await fetch(url, { ...options, headers });
         const json = await resp.json().catch(() => ({}));
         return { ok: resp.ok, status: resp.status, json };
       } catch (fetchError: any) {
         // Handle network errors (Failed to fetch, CORS, etc.)
-        if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
-          throw new Error(`Không thể kết nối đến server. Vui lòng kiểm tra:\n- Backend server có đang chạy không?\n- URL: ${url}\n- CORS settings`);
+        if (
+          fetchError.name === "TypeError" &&
+          fetchError.message.includes("fetch")
+        ) {
+          throw new Error(
+            `Không thể kết nối đến server. Vui lòng kiểm tra:\n- Backend server có đang chạy không?\n- URL: ${url}\n- CORS settings`
+          );
         }
         throw fetchError;
       }
@@ -109,7 +118,7 @@ class ApiClient {
             this.isRefreshing = true;
             this.refreshPromise = fetch(`${this.baseURL}/auth/refresh`, {
               method: "POST",
-              headers: { "Authorization": `Bearer ${refreshToken}` },
+              headers: { Authorization: `Bearer ${refreshToken}` },
             })
               .then(async (r) => {
                 const data = await r.json().catch(() => ({}));
@@ -122,14 +131,20 @@ class ApiClient {
                 this.isRefreshing = false;
               });
           }
-          const newToken = await (this.refreshPromise as Promise<string | null>);
+          const newToken = await (this.refreshPromise as Promise<
+            string | null
+          >);
           this.refreshPromise = null;
 
           if (newToken) {
             // retry original call with new token
-            (headers as Record<string, string>).Authorization = `Bearer ${newToken}`;
+            (
+              headers as Record<string, string>
+            ).Authorization = `Bearer ${newToken}`;
             const retried = await doFetch();
-            ok = retried.ok; status = retried.status; json = retried.json;
+            ok = retried.ok;
+            status = retried.status;
+            json = retried.json;
           }
         }
       }
@@ -137,10 +152,12 @@ class ApiClient {
       // Handle rate limit errors (429)
       if (status === 429) {
         const retryAfter = json?.retryAfter || 60; // Default 60 seconds
-        const errorMessage = json?.message || "Too many requests from this IP, please try again later.";
+        const errorMessage =
+          json?.message ||
+          "Too many requests from this IP, please try again later.";
         const error = new Error(errorMessage);
         (error as any).status = 429;
-        (error as any).code = json?.code || 'RATE_LIMIT_EXCEEDED';
+        (error as any).code = json?.code || "RATE_LIMIT_EXCEEDED";
         (error as any).retryAfter = retryAfter;
         (error as any).response = json;
         console.warn(`[API] Rate limit exceeded. Retry after ${retryAfter}s`);
@@ -149,7 +166,8 @@ class ApiClient {
 
       // Check for error response (either HTTP error or success: false)
       if (!ok || json?.success === false) {
-        const errorMessage = json?.message || json?.error || "API request failed";
+        const errorMessage =
+          json?.message || json?.error || "API request failed";
         const error = new Error(errorMessage);
         // Attach additional error info for debugging
         (error as any).status = status;
@@ -161,19 +179,28 @@ class ApiClient {
       return json;
     } catch (error: any) {
       // Improve error messages for common issues
-      if (error.message && error.message.includes('Không thể kết nối đến server')) {
+      if (
+        error.message &&
+        error.message.includes("Không thể kết nối đến server")
+      ) {
         console.error("API connection error:", error);
         throw error;
       }
-      
+
       // Handle network errors
-      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
-        const friendlyError = new Error(`Không thể kết nối đến server tại ${this.baseURL}. Vui lòng kiểm tra:\n- Backend server có đang chạy không?\n- Network connection\n- CORS settings`);
+      if (
+        error.name === "TypeError" &&
+        (error.message.includes("fetch") ||
+          error.message.includes("Failed to fetch"))
+      ) {
+        const friendlyError = new Error(
+          `Không thể kết nối đến server tại ${this.baseURL}. Vui lòng kiểm tra:\n- Backend server có đang chạy không?\n- Network connection\n- CORS settings`
+        );
         (friendlyError as any).originalError = error;
         console.error("API network error:", error);
         throw friendlyError;
       }
-      
+
       console.warn("API request warning:", error);
       throw error;
     }
@@ -293,6 +320,102 @@ class ApiClient {
     if (params?.to) queryParams.append("to", params.to);
     const query = queryParams.toString();
     return this.request(`/trips/stats${query ? `?${query}` : ""}`);
+  }
+
+  // Stats endpoints for dashboard
+  async getStatsOverview(params?: {
+    from?: string;
+    to?: string;
+    routeId?: number;
+    driverId?: number;
+    busId?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.from) queryParams.append("from", params.from);
+    if (params?.to) queryParams.append("to", params.to);
+    if (params?.routeId)
+      queryParams.append("routeId", params.routeId.toString());
+    if (params?.driverId)
+      queryParams.append("driverId", params.driverId.toString());
+    if (params?.busId) queryParams.append("busId", params.busId.toString());
+    const query = queryParams.toString();
+    return this.request(`/stats/overview${query ? `?${query}` : ""}`);
+  }
+
+  async getStatsTripsByDay(params?: {
+    from?: string;
+    to?: string;
+    routeId?: number;
+    driverId?: number;
+    busId?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.from) queryParams.append("from", params.from);
+    if (params?.to) queryParams.append("to", params.to);
+    if (params?.routeId)
+      queryParams.append("routeId", params.routeId.toString());
+    if (params?.driverId)
+      queryParams.append("driverId", params.driverId.toString());
+    if (params?.busId) queryParams.append("busId", params.busId.toString());
+    const query = queryParams.toString();
+    return this.request(`/stats/trips-by-day${query ? `?${query}` : ""}`);
+  }
+
+  async getStatsDriverPerformance(params?: {
+    from?: string;
+    to?: string;
+    routeId?: number;
+    driverId?: number;
+    busId?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.from) queryParams.append("from", params.from);
+    if (params?.to) queryParams.append("to", params.to);
+    if (params?.routeId)
+      queryParams.append("routeId", params.routeId.toString());
+    if (params?.driverId)
+      queryParams.append("driverId", params.driverId.toString());
+    if (params?.busId) queryParams.append("busId", params.busId.toString());
+    const query = queryParams.toString();
+    return this.request(`/stats/driver-performance${query ? `?${query}` : ""}`);
+  }
+
+  async getStatsBusUtilization(params?: {
+    from?: string;
+    to?: string;
+    routeId?: number;
+    driverId?: number;
+    busId?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.from) queryParams.append("from", params.from);
+    if (params?.to) queryParams.append("to", params.to);
+    if (params?.routeId)
+      queryParams.append("routeId", params.routeId.toString());
+    if (params?.driverId)
+      queryParams.append("driverId", params.driverId.toString());
+    if (params?.busId) queryParams.append("busId", params.busId.toString());
+    const query = queryParams.toString();
+    return this.request(`/stats/bus-utilization${query ? `?${query}` : ""}`);
+  }
+
+  async getStatsRoutePunctuality(params?: {
+    from?: string;
+    to?: string;
+    routeId?: number;
+    driverId?: number;
+    busId?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.from) queryParams.append("from", params.from);
+    if (params?.to) queryParams.append("to", params.to);
+    if (params?.routeId)
+      queryParams.append("routeId", params.routeId.toString());
+    if (params?.driverId)
+      queryParams.append("driverId", params.driverId.toString());
+    if (params?.busId) queryParams.append("busId", params.busId.toString());
+    const query = queryParams.toString();
+    return this.request(`/stats/route-punctuality${query ? `?${query}` : ""}`);
   }
 
   // Driver endpoints
@@ -450,9 +573,15 @@ class ApiClient {
   }) {
     const queryParams = new URLSearchParams();
     if (params?.area) queryParams.append("area", params.area);
-    if (params?.maxDistanceKm) queryParams.append("maxDistanceKm", params.maxDistanceKm.toString());
-    if (params?.minStudentsPerStop) queryParams.append("minStudentsPerStop", params.minStudentsPerStop.toString());
-    if (params?.maxStops) queryParams.append("maxStops", params.maxStops.toString());
+    if (params?.maxDistanceKm)
+      queryParams.append("maxDistanceKm", params.maxDistanceKm.toString());
+    if (params?.minStudentsPerStop)
+      queryParams.append(
+        "minStudentsPerStop",
+        params.minStudentsPerStop.toString()
+      );
+    if (params?.maxStops)
+      queryParams.append("maxStops", params.maxStops.toString());
 
     const query = queryParams.toString();
     return this.request(`/routes/suggestions/stops${query ? `?${query}` : ""}`);
@@ -465,15 +594,19 @@ class ApiClient {
     });
   }
 
-  async updateRouteStop(routeId: string | number, stopId: string | number, updateData: {
-    sequence?: number;
-    dwell_seconds?: number;
-    tenDiem?: string;
-    viDo?: number;
-    kinhDo?: number;
-    address?: string;
-    scheduled_time?: string;
-  }) {
+  async updateRouteStop(
+    routeId: string | number,
+    stopId: string | number,
+    updateData: {
+      sequence?: number;
+      dwell_seconds?: number;
+      tenDiem?: string;
+      viDo?: number;
+      kinhDo?: number;
+      address?: string;
+      scheduled_time?: string;
+    }
+  ) {
     return this.request(`/routes/${routeId}/stops/${stopId}`, {
       method: "PUT",
       body: JSON.stringify(updateData),
@@ -519,7 +652,8 @@ class ApiClient {
         const conflictData = error?.response?.data || error?.data || {};
         throw {
           ...error,
-          conflict: conflictData.details?.conflicts || conflictData.conflicts || [],
+          conflict:
+            conflictData.details?.conflicts || conflictData.conflicts || [],
           message: conflictData.message || "Xung đột lịch trình",
         };
       }
@@ -539,7 +673,8 @@ class ApiClient {
         const conflictData = error?.response?.data || error?.data || {};
         throw {
           ...error,
-          conflict: conflictData.details?.conflicts || conflictData.conflicts || [],
+          conflict:
+            conflictData.details?.conflicts || conflictData.conflicts || [],
           message: conflictData.message || "Xung đột lịch trình",
         };
       }
@@ -642,7 +777,8 @@ class ApiClient {
   }) {
     const queryParams = new URLSearchParams();
     if (params?.mucDo) queryParams.append("mucDo", params.mucDo);
-    if (params?.maChuyen) queryParams.append("maChuyen", String(params.maChuyen));
+    if (params?.maChuyen)
+      queryParams.append("maChuyen", String(params.maChuyen));
     if (params?.trangThai) queryParams.append("trangThai", params.trangThai);
     if (params?.tuNgay) queryParams.append("tuNgay", params.tuNgay);
     if (params?.denNgay) queryParams.append("denNgay", params.denNgay);
@@ -661,26 +797,32 @@ class ApiClient {
     trangThai?: string;
     hocSinhLienQuan?: number[];
     affectedStudents?: number[];
+    thoiGianBao?: string;
   }) {
-    // 🔥 FIX: Gửi đến endpoint /trips/:id/incident thay vì /incidents nếu có maChuyen
-    if (payload.maChuyen) {
-      return this.request(`/trips/${payload.maChuyen}/incident`, { 
-        method: "POST", 
-        body: JSON.stringify({
-          loaiSuCo: payload.loaiSuCo || "other",
-          moTa: payload.moTa,
-          mucDo: payload.mucDo,
-          viTri: payload.viTri,
-          hocSinhLienQuan: payload.hocSinhLienQuan || payload.affectedStudents,
-        })
-      });
-    }
-    // Fallback: Gửi đến /incidents nếu không có maChuyen
-    return this.request("/incidents", { method: "POST", body: JSON.stringify(payload) });
+    // Send to /incidents endpoint with all fields
+    return this.request("/incidents", {
+      method: "POST",
+      body: JSON.stringify({
+        maChuyen: payload.maChuyen,
+        loaiSuCo: payload.loaiSuCo || "other",
+        moTa: payload.moTa,
+        mucDo: payload.mucDo,
+        viTri: payload.viTri,
+        trangThai: payload.trangThai,
+        hocSinhLienQuan: payload.hocSinhLienQuan || payload.affectedStudents,
+        thoiGianBao: payload.thoiGianBao || new Date().toISOString(),
+      }),
+    });
   }
 
-  async updateIncident(id: number, payload: { moTa?: string; mucDo?: string; trangThai?: string }) {
-    return this.request(`/incidents/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  async updateIncident(
+    id: number,
+    payload: { moTa?: string; mucDo?: string; trangThai?: string }
+  ) {
+    return this.request(`/incidents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
   }
 
   async deleteIncident(id: number) {
@@ -688,10 +830,17 @@ class ApiClient {
   }
 
   // Notifications endpoints
-  async getNotifications(params?: { loaiThongBao?: string; daDoc?: boolean; limit?: number; offset?: number }) {
+  async getNotifications(params?: {
+    loaiThongBao?: string;
+    daDoc?: boolean;
+    limit?: number;
+    offset?: number;
+  }) {
     const queryParams = new URLSearchParams();
-    if (params?.loaiThongBao) queryParams.append("loaiThongBao", params.loaiThongBao);
-    if (params?.daDoc !== undefined) queryParams.append("daDoc", String(params.daDoc));
+    if (params?.loaiThongBao)
+      queryParams.append("loaiThongBao", params.loaiThongBao);
+    if (params?.daDoc !== undefined)
+      queryParams.append("daDoc", String(params.daDoc));
     if (params?.limit) queryParams.append("limit", String(params.limit));
     if (params?.offset) queryParams.append("offset", String(params.offset));
     const q = queryParams.toString();
@@ -737,7 +886,12 @@ class ApiClient {
   }
 
   // Trip history for parent
-  async getTripHistory(params?: { from?: string; to?: string; page?: number; limit?: number }) {
+  async getTripHistory(params?: {
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) {
     const queryParams = new URLSearchParams();
     if (params?.from) queryParams.append("from", params.from);
     if (params?.to) queryParams.append("to", params.to);
@@ -747,8 +901,50 @@ class ApiClient {
     return this.request(`/trips/history${q ? `?${q}` : ""}`);
   }
 
+  // Driver schedules
+  async getDriverSchedules(
+    driverId: string | number,
+    params?: {
+      date?: string;
+      dateRange?: "today" | "thisWeek" | "custom";
+      fromDate?: string;
+      toDate?: string;
+      tripStatus?: "chua_khoi_hanh" | "dang_chay" | "hoan_thanh" | "huy";
+      status?: string;
+    }
+  ) {
+    const queryParams = new URLSearchParams();
+    if (params?.date) queryParams.append("date", params.date);
+    if (params?.dateRange) queryParams.append("dateRange", params.dateRange);
+    if (params?.fromDate) queryParams.append("fromDate", params.fromDate);
+    if (params?.toDate) queryParams.append("toDate", params.toDate);
+    if (params?.tripStatus) queryParams.append("tripStatus", params.tripStatus);
+    if (params?.status) queryParams.append("status", params.status);
+
+    const query = queryParams.toString();
+    return this.request(
+      `/drivers/${driverId}/schedules${query ? `?${query}` : ""}`
+    );
+  }
+
+  async getDriverScheduleDetail(
+    driverId: string | number,
+    scheduleId: string | number
+  ) {
+    return this.request(`/drivers/${driverId}/schedules/${scheduleId}`);
+  }
+
   // Driver history
-  async getDriverHistory(driverId: string | number, params?: { from?: string; to?: string; trangThai?: string; limit?: number; offset?: number }) {
+  async getDriverHistory(
+    driverId: string | number,
+    params?: {
+      from?: string;
+      to?: string;
+      trangThai?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ) {
     const queryParams = new URLSearchParams();
     if (params?.from) queryParams.append("from", params.from);
     if (params?.to) queryParams.append("to", params.to);
@@ -760,7 +956,12 @@ class ApiClient {
   }
 
   // Export reports
-  async exportReport(params?: { format?: string; type?: string; from?: string; to?: string }) {
+  async exportReport(params?: {
+    format?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+  }) {
     const queryParams = new URLSearchParams();
     if (params?.format) queryParams.append("format", params.format);
     if (params?.type) queryParams.append("type", params.type);
@@ -769,9 +970,14 @@ class ApiClient {
     const q = queryParams.toString();
     // Return blob for file download
     const url = `${this.baseURL}/reports/export${q ? `?${q}` : ""}`;
-    const headers: HeadersInit = { "Content-Type": "application/json", "Accept": "application/octet-stream" };
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      Accept: "application/octet-stream",
+    };
     if (this.token) {
-      (headers as Record<string, string>).Authorization = `Bearer ${this.token}`;
+      (
+        headers as Record<string, string>
+      ).Authorization = `Bearer ${this.token}`;
     }
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error("Export failed");

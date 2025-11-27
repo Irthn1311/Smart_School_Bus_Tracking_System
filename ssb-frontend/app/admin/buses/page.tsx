@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/language-context"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Button } from "@/components/ui/button"
@@ -52,6 +53,7 @@ type ViewMode = "table" | "grid" | "card"
 // will be fetched from backend via busService.getBuses()
 
 export default function BusesPage() {
+  const { t } = useLanguage()
   const { toast } = useToast()
   const router = useRouter()
   const [busSchedules, setBusSchedules] = useState<Record<string, any>>({})
@@ -81,11 +83,11 @@ export default function BusesPage() {
 
   // Map backend status to display text
   const getStatusDisplay = (status?: string) => {
-    if (!status) return "Không xác định"
+    if (!status) return t("buses.unknown")
     const normalized = status.toLowerCase()
-    if (normalized === 'hoat_dong' || normalized === 'active') return "Hoạt động"
-    if (normalized === 'bao_tri' || normalized === 'maintenance') return "Bảo trì"
-    if (normalized === 'ngung_hoat_dong' || normalized === 'inactive') return "Ngưng hoạt động"
+    if (normalized === 'hoat_dong' || normalized === 'active') return t("buses.active")
+    if (normalized === 'bao_tri' || normalized === 'maintenance') return t("buses.maintenance")
+    if (normalized === 'ngung_hoat_dong' || normalized === 'inactive') return t("buses.inactive")
     return status
   }
 
@@ -136,7 +138,7 @@ export default function BusesPage() {
       setBuses(mapped)
       setBusSchedules(schMap)
     } catch (err: any) {
-      setError(err?.message || 'Không lấy được danh sách xe')
+      setError(err?.message || t("buses.loadError"))
     } finally {
       setLoading(false)
     }
@@ -213,22 +215,22 @@ export default function BusesPage() {
     return true
   })
 
-  const handleDeleteBus = async (busId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa xe buýt này?')) return
+  const handleDeleteBus = async (busId: string, busName: string) => {
+    if (!window.confirm(t("buses.deleteConfirm", { name: busName || busId }))) return
     
     try {
       setDeletingBusId(busId)
       await apiClient.deleteBus(busId)
       toast({
-        title: "Thành công",
-        description: "Đã xóa xe buýt thành công",
+        title: t("common.success"),
+        description: t("buses.deleteSuccess"),
       })
       await reloadBuses()
     } catch (err: any) {
       console.error("Error deleting bus:", err)
       toast({
-        title: "Lỗi",
-        description: err?.message || "Không thể xóa xe buýt",
+        title: t("common.error"),
+        description: err?.message || t("buses.deleteError"),
         variant: "destructive",
       })
     } finally {
@@ -242,20 +244,20 @@ export default function BusesPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Quản lý Xe buýt</h1>
-            <p className="text-muted-foreground mt-1">Quản lý thông tin và trạng thái xe buýt</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("buses.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("buses.description")}</p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90">
                 <Plus className="w-4 h-4 mr-2" />
-                Thêm xe mới
+                {t("buses.addNew")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Thêm xe buýt mới</DialogTitle>
-                <DialogDescription>Nhập thông tin xe buýt để thêm vào hệ thống</DialogDescription>
+                <DialogTitle>{t("buses.addNew")}</DialogTitle>
+                <DialogDescription>{t("buses.description")}</DialogDescription>
               </DialogHeader>
               <BusForm onClose={() => setIsAddDialogOpen(false)} onCreated={() => {
                 // refresh list after creation
@@ -284,8 +286,8 @@ export default function BusesPage() {
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Chỉnh sửa xe buýt</DialogTitle>
-                <DialogDescription>Cập nhật thông tin xe buýt</DialogDescription>
+                <DialogTitle>{t("buses.edit")}</DialogTitle>
+                <DialogDescription>{t("buses.description")}</DialogDescription>
               </DialogHeader>
               <BusForm
                 mode="edit"
@@ -303,8 +305,8 @@ export default function BusesPage() {
                 onUpdated={async () => {
                   await reloadBuses()
                   toast({
-                    title: "Thành công",
-                    description: "Đã cập nhật thông tin xe buýt",
+                    title: t("common.success"),
+                    description: t("buses.deleteSuccess"),
                   })
                 }}
               />
@@ -317,25 +319,25 @@ export default function BusesPage() {
           <Card className="border-border/50">
             <CardContent className="pt-6">
                 <div className="text-2xl font-bold text-foreground">{buses.length}</div>
-                <p className="text-sm text-muted-foreground">Tổng số xe</p>
+                <p className="text-sm text-muted-foreground">{t("buses.totalBuses")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
             <CardContent className="pt-6">
                 <div className="text-2xl font-bold text-success">{buses.filter(b => b.status === 'hoat_dong' || b.status === 'active').length}</div>
-                <p className="text-sm text-muted-foreground">Đang hoạt động</p>
+                <p className="text-sm text-muted-foreground">{t("buses.active")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
             <CardContent className="pt-6">
                 <div className="text-2xl font-bold text-warning">{buses.filter(b => b.status === 'bao_tri' || b.status === 'maintenance').length}</div>
-                <p className="text-sm text-muted-foreground">Đang bảo trì</p>
+                <p className="text-sm text-muted-foreground">{t("buses.maintenance")}</p>
             </CardContent>
           </Card>
           <Card className="border-border/50">
             <CardContent className="pt-6">
                 <div className="text-2xl font-bold text-secondary">{buses.filter(b => b.status === 'ngung_hoat_dong' || b.status === 'inactive').length}</div>
-                <p className="text-sm text-muted-foreground">Ngưng hoạt động</p>
+                <p className="text-sm text-muted-foreground">{t("buses.inactive")}</p>
             </CardContent>
           </Card>
         </div>
@@ -344,7 +346,7 @@ export default function BusesPage() {
         <Card className="border-border/50">
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-4">
-              <CardTitle>Danh sách xe buýt ({filteredBuses.length})</CardTitle>
+              <CardTitle>{t("buses.list")} ({filteredBuses.length})</CardTitle>
               <div className="flex items-center gap-3 flex-wrap">
                 {/* View Mode Toggle */}
                 <div className="flex items-center gap-1 border rounded-md p-1">
@@ -378,29 +380,29 @@ export default function BusesPage() {
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[180px]">
                     <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Lọc trạng thái" />
+                    <SelectValue placeholder={t("buses.status")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                    <SelectItem value="hoat_dong">Hoạt động</SelectItem>
-                    <SelectItem value="bao_tri">Bảo trì</SelectItem>
-                    <SelectItem value="ngung_hoat_dong">Ngưng hoạt động</SelectItem>
+                    <SelectItem value="all">{t("buses.allStatuses")}</SelectItem>
+                    <SelectItem value="hoat_dong">{t("buses.active")}</SelectItem>
+                    <SelectItem value="bao_tri">{t("buses.maintenance")}</SelectItem>
+                    <SelectItem value="ngung_hoat_dong">{t("buses.inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 {/* Sort */}
                 <div className="hidden md:flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Sắp xếp:</Label>
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">{t("buses.sortBy")}</Label>
                   <Select value={sortBy} onValueChange={setSortBy}>
                     <SelectTrigger className="w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="maXe">Mã xe</SelectItem>
-                      <SelectItem value="bienSoXe">Biển số</SelectItem>
-                      <SelectItem value="sucChua">Sức chứa</SelectItem>
-                      <SelectItem value="trangThai">Trạng thái</SelectItem>
-                      <SelectItem value="ngayTao">Ngày tạo</SelectItem>
+                      <SelectItem value="maXe">{t("buses.busId")}</SelectItem>
+                      <SelectItem value="bienSoXe">{t("buses.licensePlate")}</SelectItem>
+                      <SelectItem value="sucChua">{t("buses.capacity")}</SelectItem>
+                      <SelectItem value="trangThai">{t("buses.status")}</SelectItem>
+                      <SelectItem value="ngayTao">{t("buses.creationDate")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)}>
@@ -408,8 +410,8 @@ export default function BusesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ASC">Tăng dần</SelectItem>
-                      <SelectItem value="DESC">Giảm dần</SelectItem>
+                      <SelectItem value="ASC">{t("buses.ascending")}</SelectItem>
+                      <SelectItem value="DESC">{t("buses.descending")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -418,7 +420,7 @@ export default function BusesPage() {
                 <div className="relative w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Tìm kiếm..."
+                    placeholder={t("buses.search")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
@@ -436,20 +438,20 @@ export default function BusesPage() {
               <div className="text-destructive py-4 text-center">{error}</div>
             ) : filteredBuses.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                Không tìm thấy xe buýt nào
+                {t("common.noResults")}
               </div>
             ) : viewMode === "table" ? (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mã xe</TableHead>
-                    <TableHead>Biển số</TableHead>
-                    <TableHead>Dòng xe</TableHead>
-                    <TableHead>Sức chứa</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Tuyến hiện tại</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
+                    <TableHead>{t("buses.busId")}</TableHead>
+                    <TableHead>{t("buses.licensePlate")}</TableHead>
+                    <TableHead>{t("buses.model")}</TableHead>
+                    <TableHead>{t("buses.capacity")}</TableHead>
+                    <TableHead>{t("buses.status")}</TableHead>
+                    <TableHead>{t("buses.currentRoute")}</TableHead>
+                    <TableHead>{t("buses.creationDate")}</TableHead>
+                    <TableHead className="text-right">{t("buses.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -460,7 +462,7 @@ export default function BusesPage() {
                         <TableCell className="font-mono text-sm">{bus.maXe || bus.id}</TableCell>
                         <TableCell className="font-medium">{bus.bienSoXe || bus.plateNumber}</TableCell>
                         <TableCell>{bus.dongXe || bus.model || '-'}</TableCell>
-                        <TableCell>{bus.sucChua || bus.capacity || '-'} chỗ</TableCell>
+                        <TableCell>{bus.sucChua || bus.capacity || '-'} {t("buses.seats")}</TableCell>
                         <TableCell>
                           <Badge {...statusBadge}>
                             {getStatusDisplay(bus.status || bus.trangThai)}
@@ -477,7 +479,7 @@ export default function BusesPage() {
                                   }
                                 }}
                                 className="text-left hover:text-primary hover:underline transition-colors cursor-pointer flex items-center gap-1"
-                                title={`${busSchedules[bus.id].tenTuyen}${busSchedules[bus.id].loaiChuyen ? ` - ${busSchedules[bus.id].loaiChuyen === 'don_sang' ? 'Đón sáng' : 'Trả chiều'}` : ''}${busSchedules[bus.id].gioKhoiHanh ? ` - ${busSchedules[bus.id].gioKhoiHanh}` : ''}`}
+                                title={`${busSchedules[bus.id].tenTuyen}${busSchedules[bus.id].loaiChuyen ? ` - ${busSchedules[bus.id].loaiChuyen === 'don_sang' ? t("buses.morningPickup") : t("buses.afternoonDropoff")}` : ''}${busSchedules[bus.id].gioKhoiHanh ? ` - ${busSchedules[bus.id].gioKhoiHanh}` : ''}`}
                               >
                                 <Route className="w-3 h-3" />
                                 <span>{busSchedules[bus.id].tenTuyen || '-'}</span>
@@ -493,7 +495,7 @@ export default function BusesPage() {
                                     <div className="flex items-center gap-2 text-muted-foreground">
                                       <Clock className="w-3 h-3" />
                                       <span>
-                                        {busSchedules[bus.id].loaiChuyen === 'don_sang' ? 'Đón sáng' : 'Trả chiều'}
+                                        {busSchedules[bus.id].loaiChuyen === 'don_sang' ? t("buses.morningPickup") : t("buses.afternoonDropoff")}
                                         {busSchedules[bus.id].gioKhoiHanh && ` - ${busSchedules[bus.id].gioKhoiHanh}`}
                                       </span>
                                     </div>
@@ -501,11 +503,11 @@ export default function BusesPage() {
                                   {busSchedules[bus.id].tenTaiXe && (
                                     <div className="flex items-center gap-2 text-muted-foreground mt-1">
                                       <User className="w-3 h-3" />
-                                      <span>Tài xế: {busSchedules[bus.id].tenTaiXe}</span>
+                                      <span>{t("buses.driver")} {busSchedules[bus.id].tenTaiXe}</span>
                                     </div>
                                   )}
                                   <div className="text-muted-foreground mt-1 pt-1 border-t text-[10px]">
-                                    Click để xem chi tiết
+                                    {t("buses.clickToView")}
                                   </div>
                                 </div>
                               </div>
@@ -550,7 +552,7 @@ export default function BusesPage() {
                                   </div>
                                   {bus.ngayCapNhat && bus.ngayCapNhat !== bus.ngayTao && (
                                     <div className="text-muted-foreground pt-1 mt-1 border-t">
-                                      Cập nhật: {new Date(bus.ngayCapNhat).toLocaleString("vi-VN", {
+                                      {t("buses.updated")} {new Date(bus.ngayCapNhat).toLocaleString("vi-VN", {
                                         day: "2-digit",
                                         month: "2-digit",
                                         year: "numeric",
@@ -618,7 +620,7 @@ export default function BusesPage() {
                         <div className="flex items-start justify-between">
                           <div>
                             <CardTitle className="text-lg">{bus.bienSoXe || bus.plateNumber}</CardTitle>
-                            <p className="text-xs text-muted-foreground mt-1">Mã: {bus.maXe || bus.id}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{t("buses.busCode")} {bus.maXe || bus.id}</p>
                           </div>
                           <Badge {...statusBadge} className="text-xs">
                             {getStatusDisplay(bus.status || bus.trangThai)}
@@ -627,15 +629,15 @@ export default function BusesPage() {
                       </CardHeader>
                       <CardContent className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Dòng xe:</span>
+                          <span className="text-muted-foreground">{t("buses.modelLabel")}</span>
                           <span className="font-medium">{bus.dongXe || bus.model || '-'}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Sức chứa:</span>
-                          <span className="font-medium">{bus.sucChua || bus.capacity || '-'} chỗ</span>
+                          <span className="text-muted-foreground">{t("buses.capacityLabel")}</span>
+                          <span className="font-medium">{bus.sucChua || bus.capacity || '-'} {t("buses.seats")}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Tuyến:</span>
+                          <span className="text-muted-foreground">{t("buses.routeLabel")}</span>
                           {busSchedules[bus.id]?.tenTuyen ? (
                             <button
                               onClick={() => {

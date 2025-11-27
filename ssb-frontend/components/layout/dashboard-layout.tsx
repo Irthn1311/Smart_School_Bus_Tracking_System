@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/language-context"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Bell, Search, LogOut, Settings, User, Menu, Users } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { LanguageToggle } from "@/components/ui/language-toggle"
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -24,6 +27,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
   const { user, logout } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const pathname = usePathname()
 
@@ -60,7 +64,7 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
           type="button"
           onClick={closeSidebar}
           className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm lg:hidden"
-          aria-label="Đóng menu"
+          aria-label={t("header.closeMenu")}
         />
       )}
 
@@ -75,7 +79,7 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
               size="icon"
               className="lg:hidden"
               onClick={toggleSidebar}
-              aria-label="Mở menu"
+              aria-label={t("header.openMenu")}
             >
               <Menu className="w-5 h-5" />
             </Button>
@@ -83,14 +87,16 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Tìm kiếm..."
+                placeholder={t("common.search")}
                 className="pl-10 h-9 bg-background border-input"
               />
             </div>
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <LanguageToggle />
             <Button variant="ghost" size="icon" className="relative hover:bg-accent">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
@@ -109,40 +115,40 @@ export function DashboardLayout({ children, sidebar }: DashboardLayoutProps) {
                     </AvatarFallback>
                   </Avatar>
                   <div className="text-left hidden md:block">
-                    <p className="text-sm font-medium">{user?.name || "Người dùng"}</p>
+                    <p className="text-sm font-medium">{user?.name || t("header.user")}</p>
                     <p className="text-xs text-muted-foreground">
-                      {user?.email || "Chưa có email"}
+                      {user?.email || t("header.noEmail")}
                     </p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Tài khoản của tôi</DropdownMenuLabel>
+                <DropdownMenuLabel>{t("header.myAccount")}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={() => router.push(`/${user?.role}/profile`)}>
                   <User className="w-4 h-4 mr-2" />
-                  Hồ sơ cá nhân
+                  {t("header.profile")}
                 </DropdownMenuItem>
 
                 {user?.role?.toLowerCase() === "parent" && (
                   <DropdownMenuItem onClick={() => router.push("/parent/select-student")}>
                     <Users className="w-4 h-4 mr-2" />
-                    Chuyển học sinh
+                    {t("header.switchStudent")}
                   </DropdownMenuItem>
                 )}
 
                 <DropdownMenuItem onClick={() => router.push(`/${user?.role}/settings`)}>
                   <Settings className="w-4 h-4 mr-2" />
-                  Cài đặt
+                  {t("header.settings")}
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={logout} className="text-destructive">
                   <LogOut className="w-4 h-4 mr-2" />
-                  Đăng xuất
+                  {t("header.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

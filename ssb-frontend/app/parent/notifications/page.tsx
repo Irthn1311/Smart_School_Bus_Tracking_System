@@ -33,14 +33,27 @@ export default function ParentNotifications() {
 
   const iconForType = (t: string) => (t === "warning" ? AlertCircle : t === "success" ? CheckCircle2 : Info)
 
+  // Load initial notifications from API
   useEffect(() => {
     const load = async () => {
       try {
+        setLoading(true)
         const res = await apiClient.getNotifications({ limit: 100 })
+        console.log('🔍 [PARENT LOAD] Raw API response:', res)
         const arr = Array.isArray(res?.data) ? res.data : []
+        console.log('🔍 [PARENT LOAD] Total notifications from API:', arr.length)
+        
         const mapped = arr.map((n: any) => {
           const t = n.loaiThongBao === "su_co" ? "warning" : n.loaiThongBao === "chuyen_di" ? "info" : "info"
           const dt = n.thoiGianGui ? new Date(n.thoiGianGui) : new Date()
+          
+          console.log('📋 [PARENT LOAD] Processing notification:', {
+            maThongBao: n.maThongBao,
+            loaiThongBao: n.loaiThongBao,
+            tieuDe: n.tieuDe,
+            calculatedType: t
+          })
+          
           return {
             id: n.maThongBao,
             type: t,
@@ -52,6 +65,7 @@ export default function ParentNotifications() {
             icon: iconForType(t),
           }
         })
+        console.log('✅ [PARENT LOAD] Mapped notifications:', mapped.length, mapped)
         setNotifications(mapped)
       } catch (e) {
         setNotifications([])
@@ -60,11 +74,24 @@ export default function ParentNotifications() {
       }
     }
     load()
+  }, [])
 
+  // 🔔 REALTIME: Listen for new notifications
+  useEffect(() => {
     const handler = (e: any) => {
       const payload = e.detail
+      console.log('🔔 [PARENT NOTIF] Received new notification:', payload)
+      console.log('🔔 [PARENT NOTIF] Payload details:', {
+        maThongBao: payload.maThongBao,
+        loaiThongBao: payload.loaiThongBao,
+        tieuDe: payload.tieuDe,
+        noiDung: payload.noiDung
+      })
+      
       const dt = payload.thoiGianGui ? new Date(payload.thoiGianGui) : new Date()
       const t = payload.loaiThongBao === "su_co" ? "warning" : payload.loaiThongBao === "chuyen_di" ? "info" : "info"
+      console.log('🔍 [PARENT NOTIF] Calculated type:', t, 'from loaiThongBao:', payload.loaiThongBao)
+      
       const item = {
         id: payload.maThongBao || Date.now(),
         type: t,
@@ -75,14 +102,34 @@ export default function ParentNotifications() {
         read: false,
         icon: iconForType(t),
       }
-      setNotifications((prev) => [item, ...prev])
+      console.log('✅ [PARENT NOTIF] Adding to list (current count:', notifications.length, ')');
+      
+      // Check for duplicates before adding
+      setNotifications((prev) => {
+        const exists = prev.some(n => n.id === item.id)
+        if (exists) {
+          console.log('⚠️ [PARENT NOTIF] Duplicate notification, skipping:', item.id)
+          return prev
+        }
+        console.log('✅ [PARENT NOTIF] Added new notification:', item.id)
+        return [item, ...prev]
+      })
+
+      // Show toast for urgent notifications
+      if (t === "warning") {
+        toast({
+          title: item.title,
+          description: item.message,
+          variant: "destructive",
+        })
+      }
     }
     window.addEventListener("notificationNew", handler)
 
     return () => {
       window.removeEventListener("notificationNew", handler)
     }
-  }, [])
+  }, [toast])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -123,6 +170,17 @@ export default function ParentNotifications() {
   }
 
   const deleteOne = async (id: number) => {
+    // Skip API call if ID is a timestamp (realtime notification not yet in DB)
+    if (id > 1000000000000) {
+      console.log('⚠️ [PARENT NOTIF] Skipping delete API for temporary ID:', id)
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+      toast({
+        title: "Thành công",
+        description: "Đã xóa thông báo",
+      })
+      return
+    }
+
     try {
       await apiClient.deleteNotification(id)
       setNotifications((prev) => prev.filter((n) => n.id !== id))
@@ -141,6 +199,14 @@ export default function ParentNotifications() {
   }
 
   const markAsRead = async (id: number) => {
+    // Skip if ID is a timestamp (realtime notification not yet in DB)
+    if (id > 1000000000000) {
+      console.log('⚠️ [PARENT NOTIF] Skipping mark read for temporary ID:', id)
+      // Just update local state
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
+      return
+    }
+
     try {
       await apiClient.markNotificationRead(id)
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))

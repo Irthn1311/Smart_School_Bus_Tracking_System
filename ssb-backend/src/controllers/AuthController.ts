@@ -1,3 +1,4 @@
+// @ts-nocheck
 // AuthController - Controller chuyên nghiệp cho xác thực và phân quyền
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";

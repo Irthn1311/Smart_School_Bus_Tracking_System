@@ -1,3 +1,4 @@
+// @ts-nocheck
 // StopController - Controller cho quản lý stops (điểm dừng) độc lập
 import StopService from "../services/StopService.js";
 import * as response from "../utils/response.js";

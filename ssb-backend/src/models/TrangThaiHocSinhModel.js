@@ -110,6 +110,22 @@ const TrangThaiHocSinhModel = {
     );
     return result.affectedRows > 0;
   },
+
+  // Kiểm tra xem có học sinh nào trong danh sách thuộc chuyến đi không
+  async hasStudentInTrip(tripId, studentIds) {
+    if (!studentIds || studentIds.length === 0) {
+      return false;
+    }
+
+    const placeholders = studentIds.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) as count FROM TrangThaiHocSinh 
+       WHERE maChuyen = ? AND maHocSinh IN (${placeholders})`,
+      [tripId, ...studentIds]
+    );
+    
+    return rows[0].count > 0;
+  },
 };
 
 export default TrangThaiHocSinhModel;

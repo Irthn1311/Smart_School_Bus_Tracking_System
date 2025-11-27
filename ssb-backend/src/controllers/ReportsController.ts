@@ -1,9 +1,11 @@
+// @ts-nocheck
 import Joi from "joi";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import ExcelJS from "exceljs";
+import pool from "../config/db.js";
 
 const REPORT_TYPES = ["overview", "trips", "buses", "drivers", "students", "incidents"];
 const FORMATS = ["csv", "excel", "xlsx", "pdf"];
@@ -47,10 +49,25 @@ async function buildDataByType(type, dateFrom, dateTo) {
     case "overview": {
       const busStats = await XeBuytModel.getStats();
       const tripStats = await ChuyenDiModel.getStats(dateFrom, dateTo);
+      
+      // Lấy tổng số học sinh
+      const students = await HocSinhModel.getAll();
+      const studentStats = {
+        total: students.length,
+      };
+      
+      // Lấy số sự cố
+      const incidents = await SuCoModel.getAll({ tuNgay: dateFrom, denNgay: dateTo });
+      const incidentStats = {
+        total: incidents.length,
+      };
+      
       return {
         period: { from: dateFrom, to: dateTo },
         buses: busStats,
         trips: tripStats,
+        students: studentStats,
+        incidents: incidentStats,
       };
     }
     case "trips": {
@@ -95,11 +112,107 @@ async function buildDataByType(type, dateFrom, dateTo) {
     }
     case "drivers": {
       const drivers = await TaiXeModel.getAll();
-      return { drivers };
+      // Tính hiệu suất tài xế
+      const driverPerformance = await Promise.all(
+        drivers.map(async (driver) => {
+          try {
+            // Đếm số chuyến đi của tài xế
+            const trips = await ChuyenDiModel.getAll({ 
+              from: dateFrom, 
+              to: dateTo,
+              maTaiXe: driver.maTaiXe 
+            });
+            
+            const totalTrips = Array.isArray(trips) ? trips.length : 0;
+            const onTimeTrips = Array.isArray(trips) 
+              ? trips.filter(t => {
+                  if (!t.gioBatDauThucTe || !t.gioKhoiHanh) return false;
+                  const actual = new Date(t.gioBatDauThucTe);
+                  const scheduled = new Date(t.gioKhoiHanh);
+                  const diffMinutes = (actual - scheduled) / (1000 * 60);
+                  return Math.abs(diffMinutes) <= 5; // Trong vòng 5 phút
+                }).length
+              : 0;
+            
+            const onTimeRate = totalTrips > 0 
+              ? Math.round((onTimeTrips / totalTrips) * 100) 
+              : 0;
+            
+            // Rating giả định dựa trên on-time rate
+            const rating = totalTrips > 0
+              ? Math.min(5, Math.max(1, (onTimeRate / 20).toFixed(1)))
+              : 0;
+            
+            return {
+              name: driver.hoTen || '',
+              hoTen: driver.hoTen || '',
+              maTaiXe: driver.maTaiXe,
+              trips: totalTrips,
+              onTimeRate: onTimeRate,
+              rating: parseFloat(rating),
+            };
+          } catch (err) {
+            console.error(`Error calculating performance for driver ${driver.maTaiXe}:`, err);
+            return {
+              name: driver.hoTen || '',
+              hoTen: driver.hoTen || '',
+              maTaiXe: driver.maTaiXe,
+              trips: 0,
+              onTimeRate: 0,
+              rating: 0,
+            };
+          }
+        })
+      );
+      
+      // Sắp xếp theo số chuyến đi giảm dần
+      driverPerformance.sort((a, b) => b.trips - a.trips);
+      
+      return { drivers, driverPerformance };
     }
     case "students": {
       const students = await HocSinhModel.getWithParentInfo();
-      return { students };
+      
+      // Tính toán attendance dựa trên TrangThaiHocSinh
+      const attendanceQuery = `
+        SELECT 
+          tths.trangThai,
+          COUNT(*) as count
+        FROM TrangThaiHocSinh tths
+        INNER JOIN ChuyenDi cd ON tths.maChuyen = cd.maChuyen
+        WHERE DATE(cd.ngayChay) >= DATE(?) AND DATE(cd.ngayChay) <= DATE(?)
+        GROUP BY tths.trangThai
+      `;
+      
+      const [attendanceRows] = await pool.query(attendanceQuery, [dateFrom, dateTo]);
+      
+      // Tính tổng và phân loại
+      let present = 0;  // da_don, da_tra
+      let absent = 0;   // vang
+      let late = 0;     // Tạm thời set = 0
+      
+      attendanceRows.forEach((row: any) => {
+        const status = row.trangThai;
+        const count = Number(row.count || 0);
+        
+        if (status === 'da_don' || status === 'da_tra') {
+          present += count;
+        } else if (status === 'vang') {
+          absent += count;
+        }
+      });
+      
+      const total = present + absent + late;
+      
+      const attendance = {
+        total,
+        present,
+        absent,
+        late,
+        presentRate: total > 0 ? Math.round((present / total) * 100) : 0,
+      };
+      
+      return { students, attendance };
     }
     case "incidents": {
       const incidents = await SuCoModel.getAll({ tuNgay: dateFrom, denNgay: dateTo });

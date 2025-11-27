@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/language-context"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
@@ -18,6 +19,7 @@ import { apiClient } from "@/lib/api"
 
 export default function AdminDashboard() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const [busStats, setBusStats] = useState<any | null>(null)
   const [tripStats, setTripStats] = useState<any | null>(null)
@@ -64,17 +66,17 @@ export default function AdminDashboard() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Tổng quan</h1>
-            <p className="text-muted-foreground mt-1">Theo dõi hoạt động xe buýt trong thời gian thực</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("sidebar.overview")}</h1>
+            <p className="text-muted-foreground mt-1">{t("dashboard.monitorActivity")}</p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm">
               <Activity className="w-4 h-4 mr-2" />
-              Xuất báo cáo
+              {t("dashboard.exportReport")}
             </Button>
             <Button size="sm" className="bg-primary hover:bg-primary/90">
               <MapPin className="w-4 h-4 mr-2" />
-              Xem bản đồ đầy đủ
+              {t("dashboard.viewFullMap")}
             </Button>
           </div>
         </div>
@@ -82,23 +84,23 @@ export default function AdminDashboard() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatsCard
-            title="Chuyến đang hoạt động"
+            title={t("dashboard.activeTrips")}
             value={String(tripStats?.totalTrips ?? 0)}
-            change={`Hoàn thành: ${tripStats?.completedTrips ?? 0}`}
+            change={`${t("dashboard.completedTrips")}: ${tripStats?.completedTrips ?? 0}`}
             trend="up"
             icon={Bus}
             iconColor="text-primary"
           />
           <StatsCard
-            title="Xe đang trễ"
+            title={t("dashboard.delayedBuses")}
             value={String(tripStats?.delayedTrips ?? 0)}
-            change="Theo ngày hiện tại"
+            change={t("dashboard.asOfToday")}
             trend="neutral"
             icon={Clock}
             iconColor="text-warning"
           />
           <StatsCard
-            title="Sự cố trong ngày"
+            title={t("dashboard.incidentsToday")}
             value={String(0)}
             change="—"
             trend="down"
@@ -106,9 +108,9 @@ export default function AdminDashboard() {
             iconColor="text-destructive"
           />
           <StatsCard
-            title="Tỷ lệ đúng giờ"
+            title={t("dashboard.onTimeRate")}
             value={`${tripStats?.onTimePercentage ?? 0}%`}
-            change={`Trung bình: ${Math.round((tripStats?.averageDuration ?? 0))} phút/chuyến`}
+            change={t("dashboard.avgMinutes", { count: Math.round((tripStats?.averageDuration ?? 0)) })}
             trend="up"
             icon={TrendingUp}
             iconColor="text-success"
@@ -123,10 +125,10 @@ export default function AdminDashboard() {
             <Card className="border-border/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Hiệu suất tuần này</CardTitle>
+                  <CardTitle>{t("dashboard.weeklyPerformance")}</CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
-                      7 ngày qua
+                      {t("dashboard.last7Days")}
                     </Badge>
                   </div>
                 </div>
@@ -139,7 +141,7 @@ export default function AdminDashboard() {
             {/* Bus Status Distribution */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Trạng thái xe buýt</CardTitle>
+                  <CardTitle>{t("dashboard.busStatus")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <BusStatusChart />
@@ -150,9 +152,9 @@ export default function AdminDashboard() {
             <Card className="border-border/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Bản đồ theo dõi Real-time</CardTitle>
+                  <CardTitle>{t("dashboard.realtimeMap")}</CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => router.push("/admin/tracking")}>
-                    Xem đầy đủ
+                    {t("dashboard.viewFull")}
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
@@ -175,7 +177,7 @@ export default function AdminDashboard() {
             {/* Quick Stats */}
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle>Thống kê nhanh</CardTitle>
+                <CardTitle>{t("dashboard.quickStats")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -184,8 +186,8 @@ export default function AdminDashboard() {
                       <Bus className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Tổng số xe</p>
-                      <p className="text-xs text-muted-foreground">Toàn bộ xe trong hệ thống</p>
+                      <p className="text-sm font-medium">{t("dashboard.totalBuses")}</p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard.active")}</p>
                     </div>
                   </div>
                   <p className="text-2xl font-bold">{busStats?.totalBuses ?? '-'}</p>
@@ -212,8 +214,8 @@ export default function AdminDashboard() {
                       <Users className="w-5 h-5 text-success" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Học sinh</p>
-                      <p className="text-xs text-muted-foreground">Đang trên xe</p>
+                      <p className="text-sm font-medium">{t("dashboard.students")}</p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard.onBus")}</p>
                     </div>
                   </div>
                   <p className="text-2xl font-bold">—</p>
@@ -225,8 +227,8 @@ export default function AdminDashboard() {
                       <MapPin className="w-5 h-5 text-warning" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Tuyến đường</p>
-                      <p className="text-xs text-muted-foreground">Đang hoạt động</p>
+                      <p className="text-sm font-medium">{t("dashboard.routes")}</p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard.active")}</p>
                     </div>
                   </div>
                   <p className="text-2xl font-bold">—</p>

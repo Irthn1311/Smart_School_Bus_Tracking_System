@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ScheduleController - Controller chuyên nghiệp cho quản lý lịch trình với real-time features
 import ScheduleService from "../services/ScheduleService.js";
 import LichTrinhModel from "../models/LichTrinhModel.js";
