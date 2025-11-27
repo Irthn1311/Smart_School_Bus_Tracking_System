@@ -1,7 +1,7 @@
 import express from "express";
 const router = express.Router();
 
-import BusController from "../../controllers/BusController.ts";
+import BusController from "../../controllers/BusController.js";
 import AuthMiddleware from "../../middlewares/AuthMiddleware.js";
 import ValidationMiddleware from "../../middlewares/ValidationMiddleware.js";
 
