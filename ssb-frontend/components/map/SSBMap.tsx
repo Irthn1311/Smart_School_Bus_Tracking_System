@@ -66,7 +66,7 @@ interface SSBMapProps {
 }
 
 function SSBMap({
-  center = { lat: 10.77653, lng: 106.700981 },
+  center = { lat: 10.760064662799088, lng: 106.6822422067464 },
   zoom = 13,
   polyline,
   routes = [],
@@ -94,7 +94,7 @@ function SSBMap({
         "[SSBMap] Invalid center coordinates, using default:",
         center
       );
-      return { lat: 10.77653, lng: 106.700981 };
+      return { lat: 10.760064662799088, lng: 106.6822422067464 };
     }
 
     // Check if coordinates are within valid range
@@ -103,7 +103,7 @@ function SSBMap({
         "[SSBMap] Center coordinates out of range, using default:",
         center
       );
-      return { lat: 10.77653, lng: 106.700981 };
+      return { lat: 10.760064662799088, lng: 106.6822422067464 };
     }
 
     return { lat, lng };

@@ -266,12 +266,36 @@ export default function SchedulePage() {
       const activeBuses = buses.filter((b: any) => b.trangThai === 'hoat_dong')
       const activeDrivers = drivers.filter((d: any) => d.trangThai === 'hoat_dong')
 
-      if (activeBuses.length === 0 || activeDrivers.length === 0 || routes.length === 0) {
+      // Kiểm tra tài nguyên với thông báo cụ thể
+      if (routes.length === 0) {
         toast({
           title: "Không thể phân công",
-          description: "Không đủ xe, tài xế hoặc tuyến đường",
+          description: "Không có tuyến đường nào. Vui lòng tạo tuyến đường trước.",
           variant: "destructive",
         })
+        setAutoAssignLoading(false)
+        return
+      }
+
+      if (activeBuses.length === 0) {
+        toast({
+          title: "Không đủ tài nguyên",
+          description: `Không có xe buýt đang hoạt động. Hiện có ${buses.length} xe (${buses.length - activeBuses.length} không hoạt động). Vui lòng thêm xe buýt hoặc kích hoạt xe buýt.`,
+          variant: "destructive",
+          duration: 7000,
+        })
+        setAutoAssignLoading(false)
+        return
+      }
+
+      if (activeDrivers.length === 0) {
+        toast({
+          title: "Không đủ tài nguyên",
+          description: `Không có tài xế đang hoạt động. Hiện có ${drivers.length} tài xế (${drivers.length - activeDrivers.length} không hoạt động). Vui lòng thêm tài xế hoặc kích hoạt tài xế.`,
+          variant: "destructive",
+          duration: 7000,
+        })
+        setAutoAssignLoading(false)
         return
       }
 
@@ -338,7 +362,16 @@ export default function SchedulePage() {
         let availableDrivers = activeDrivers.filter((d: any) => !assignedDriverIds.has(d.maTaiXe))
 
         if (availableBuses.length === 0 || availableDrivers.length === 0) {
-          console.log(`[AutoAssign] Skip date ${dateStr}: No available resources (buses: ${availableBuses.length}, drivers: ${availableDrivers.length})`)
+          const missingResource = availableBuses.length === 0 && availableDrivers.length === 0
+            ? 'xe buýt và tài xế'
+            : availableBuses.length === 0
+            ? 'xe buýt'
+            : 'tài xế'
+          
+          const warningMsg = `Ngày ${dateStr}: Không đủ ${missingResource} khả dụng. Đã phân công hết ${missingResource} cho ngày này.`
+          errors.push(warningMsg)
+          console.warn(`[AutoAssign] Skip date ${dateStr}: No available resources (buses: ${availableBuses.length}, drivers: ${availableDrivers.length})`)
+          // Không tăng totalFailed vì đây chỉ là warning về thiếu tài nguyên, không phải lỗi thực sự
           continue
         }
 
@@ -352,7 +385,16 @@ export default function SchedulePage() {
 
             // Kiểm tra nếu không còn available resources
             if (availableBuses.length === 0 || availableDrivers.length === 0) {
-              console.log(`[AutoAssign] Skip route ${route.maTuyen || route.id}, tripType ${tripType}: No available resources`)
+              const missingResource = availableBuses.length === 0 && availableDrivers.length === 0
+                ? 'xe buýt và tài xế'
+                : availableBuses.length === 0
+                ? 'xe buýt'
+                : 'tài xế'
+              
+              const warningMsg = `Ngày ${dateStr}, Tuyến ${route.tenTuyen || route.maTuyen}, ${tripType === 'don_sang' ? 'Đón sáng' : 'Trả chiều'}: Không đủ ${missingResource} khả dụng`
+              errors.push(warningMsg)
+              console.warn(`[AutoAssign] Skip route ${route.maTuyen || route.id}, tripType ${tripType}: No available resources`)
+              // Không tăng totalFailed vì đây chỉ là warning về thiếu tài nguyên, không phải lỗi thực sự
               break
             }
 
@@ -530,6 +572,24 @@ export default function SchedulePage() {
               } else if (err?.status) {
                 errorMessage = `HTTP ${err.status}: ${err.statusText || 'Request failed'}`
               }
+
+              // 🔥 Kiểm tra các lỗi cụ thể về tài nguyên
+              const errorStr = errorMessage.toLowerCase()
+              const responseData = err?.response?.data
+              
+              if (errorStr.includes('bus_not_found') || errorStr.includes('không tìm thấy xe')) {
+                errorMessage = `Không tìm thấy xe buýt (ID: ${bus.maXe || bus.id}). Vui lòng kiểm tra lại danh sách xe buýt.`
+              } else if (errorStr.includes('driver_not_found') || errorStr.includes('không tìm thấy tài xế')) {
+                errorMessage = `Không tìm thấy tài xế (ID: ${driver.maTaiXe || driver.maNguoiDung || driver.id}). Vui lòng kiểm tra lại danh sách tài xế.`
+              } else if (errorStr.includes('bus_not_active') || errorStr.includes('xe không hoạt động')) {
+                errorMessage = `Xe buýt "${bus.bienSoXe || bus.plateNumber || bus.maXe || bus.id}" không đang hoạt động. Vui lòng kích hoạt xe buýt.`
+              } else if (errorStr.includes('driver_not_active') || errorStr.includes('tài xế không hoạt động')) {
+                errorMessage = `Tài xế "${driver.tenTaiXe || driver.hoTen || driver.maTaiXe || driver.id}" không đang hoạt động. Vui lòng kích hoạt tài xế.`
+              } else if (errorStr.includes('schedule_conflict') || errorStr.includes('xung đột')) {
+                errorMessage = `Xung đột lịch trình: ${responseData?.conflicts?.[0]?.conflictType === 'bus' ? 'Xe buýt' : 'Tài xế'} đã có lịch trình khác vào thời gian này.`
+              } else if (errorStr.includes('missing_required_fields') || errorStr.includes('thiếu trường')) {
+                errorMessage = `Thiếu thông tin bắt buộc: ${responseData?.errors?.[0]?.message || 'Vui lòng kiểm tra lại dữ liệu.'}`
+              }
               
               // Log toàn bộ error object để debug (chỉ log một lần để tránh spam)
               if (totalFailed === 1) {
@@ -629,19 +689,49 @@ export default function SchedulePage() {
         
         fetchAllSchedules()
       } else {
-        const description = totalFailed > 0 && errors.length > 0
-          ? `Không thể tạo lịch trình tự động. ${totalFailed} lỗi xảy ra. Lỗi đầu tiên: ${errors[0]}. Xem console để biết chi tiết.`
-          : `Không thể tạo lịch trình tự động. Có thể tất cả resources đã được phân công.`
+        // Kiểm tra xem có phải do thiếu tài nguyên không
+        const resourceErrors = errors.filter(e => 
+          e.toLowerCase().includes('không đủ') || 
+          e.toLowerCase().includes('không có') ||
+          e.toLowerCase().includes('không tìm thấy') ||
+          e.toLowerCase().includes('không hoạt động')
+        )
+        
+        let description = ''
+        if (resourceErrors.length > 0) {
+          // Tổng hợp các lỗi về tài nguyên
+          const missingBuses = resourceErrors.filter(e => e.includes('xe buýt') || e.includes('xe')).length
+          const missingDrivers = resourceErrors.filter(e => e.includes('tài xế')).length
+          
+          const missingList: string[] = []
+          if (missingBuses > 0) missingList.push(`${missingBuses} lỗi về xe buýt`)
+          if (missingDrivers > 0) missingList.push(`${missingDrivers} lỗi về tài xế`)
+          
+          description = `Không thể tạo lịch trình tự động do thiếu tài nguyên: ${missingList.join(', ')}. Vui lòng thêm hoặc kích hoạt ${missingBuses > 0 && missingDrivers > 0 ? 'xe buýt và tài xế' : missingBuses > 0 ? 'xe buýt' : 'tài xế'}.`
+        } else if (totalFailed > 0 && errors.length > 0) {
+          description = `Không thể tạo lịch trình tự động. ${totalFailed} lỗi xảy ra. Lỗi đầu tiên: ${errors[0]}. Xem console để biết chi tiết.`
+        } else {
+          description = `Không thể tạo lịch trình tự động. Có thể tất cả resources đã được phân công hoặc không đủ tài nguyên.`
+        }
         
         toast({
           title: "Không thành công",
           description,
           variant: "destructive",
-          duration: 7000,
+          duration: 10000, // Hiển thị lâu hơn để user đọc được
         })
         
         if (errors.length > 0) {
-          console.error(`[AutoAssign] All ${errors.length} errors:`, errors)
+          // Phân loại errors và warnings
+          const actualErrors = errors.filter(e => !e.toLowerCase().includes('không đủ') && !e.toLowerCase().includes('đã phân công hết'))
+          const warnings = errors.filter(e => e.toLowerCase().includes('không đủ') || e.toLowerCase().includes('đã phân công hết'))
+          
+          if (actualErrors.length > 0) {
+            console.error(`[AutoAssign] ${actualErrors.length} actual errors:`, actualErrors)
+          }
+          if (warnings.length > 0) {
+            console.warn(`[AutoAssign] ${warnings.length} warnings (insufficient resources):`, warnings)
+          }
         }
       }
     } catch (err: any) {

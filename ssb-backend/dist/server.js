@@ -29,6 +29,7 @@ import stopRoutes from "./routes/api/stop.js";
 import statsRoutes from "./routes/api/stats.route.js";
 import settingsRoutes from "./routes/api/settings.route.js";
 import busStopOptimizationRoutes from "./routes/api/bus-stop-optimization.route.js";
+import telemetryRoutes from "./routes/api/telemetry.route.js";
 const app = express();
 app.set("trust proxy", 1);
 if (config.nodeEnv === "development") {
@@ -124,6 +125,7 @@ app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/buses`, busRoutes);
 app.use(`${API_PREFIX}/drivers`, driverRoutes);
 app.use(`${API_PREFIX}/students`, studentRoutes);
+app.use("/api", telemetryRoutes);
 app.use(`${API_PREFIX}/trips`, tripRoutes);
 app.use(`${API_PREFIX}/schedules`, scheduleRoutes);
 app.use(`${API_PREFIX}/routes`, routeRoutes);

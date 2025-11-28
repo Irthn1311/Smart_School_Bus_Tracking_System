@@ -199,9 +199,22 @@ class RouteService {
     
     // Nếu tạo tuyến đi và yêu cầu tạo tuyến về, tự động tạo tuyến về
     if (createReturnRoute && (!routeType || routeType === 'di')) {
+      // Tạo tên tuyến về - kiểm tra duplicate
+      let returnRouteName = `${payload.tenTuyen} (Về)`;
+      let counter = 1;
+      while (true) {
+        const existing = await TuyenDuongModel.getByName(returnRouteName);
+        if (!existing) {
+          break; // Tên chưa tồn tại, có thể dùng
+        }
+        // Tên đã tồn tại, thêm số thứ tự
+        counter++;
+        returnRouteName = `${payload.tenTuyen} (Về ${counter})`;
+      }
+      
       // Tạo tuyến về với thông tin đảo ngược
       const returnRouteData = {
-        tenTuyen: `${payload.tenTuyen} (Về)`,
+        tenTuyen: returnRouteName,
         diemBatDau: payload.diemKetThuc,
         diemKetThuc: payload.diemBatDau,
         thoiGianUocTinh: payload.thoiGianUocTinh,

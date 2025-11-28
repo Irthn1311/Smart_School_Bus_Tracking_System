@@ -279,7 +279,7 @@ class VehicleRoutingService {
    */
   static async solveVRP(options = {}) {
     const {
-      depot = { lat: 10.77653, lng: 106.700981 }, // Đại học Sài Gòn
+      depot = { lat: 10.760064662799088, lng: 106.6822422067464 }, // Đại học Sài Gòn
       capacity = 40,
       splitVirtualNodes: shouldSplit = true,
     } = options;

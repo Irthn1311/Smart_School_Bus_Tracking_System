@@ -1,1 +1,0 @@
-Đây là js của cấu hình hệ thống (db, firebase, socket, env...)

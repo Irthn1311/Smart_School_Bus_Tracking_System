@@ -3,26 +3,79 @@ import Joi from "joi";
 class ValidationMiddleware {
   // Validate bus data
   static validateBus(req, res, next) {
-    const schema = Joi.object({
-      bienSoXe: Joi.string()
-        .pattern(/^[0-9]{2}[A-Z]{1,2}-[0-9]{4,5}$/)
-        .required()
-        .messages({
-          "string.pattern.base": "Biển số xe không hợp lệ (VD: 29A-12345)",
-          "any.required": "Biển số xe là bắt buộc",
+    // Phân biệt giữa CREATE (POST) và UPDATE (PUT)
+    const isUpdate = req.method === 'PUT' || req.method === 'PATCH';
+    
+    let schema;
+    
+    if (isUpdate) {
+      // Schema cho UPDATE: tất cả fields đều optional
+      schema = Joi.object({
+        bienSoXe: Joi.string()
+          .pattern(/^[0-9]{2}[A-Z]{1,2}-[0-9]{4,5}$/)
+          .optional()
+          .allow(null, "")
+          .messages({
+            "string.pattern.base": "Biển số xe không hợp lệ (VD: 29A-12345)",
+          }),
+        dongXe: Joi.string().max(50).optional().allow(null, ""),
+        sucChua: Joi.number().integer().min(8).max(100).optional().allow(null).messages({
+          "number.min": "Sức chứa phải từ 8 đến 100 người",
+          "number.max": "Sức chứa phải từ 8 đến 100 người",
         }),
-      dongXe: Joi.string().max(50).optional(),
-      sucChua: Joi.number().integer().min(8).max(100).required().messages({
-        "number.min": "Sức chứa phải từ 8 đến 100 người",
-        "number.max": "Sức chứa phải từ 8 đến 100 người",
-        "any.required": "Sức chứa là bắt buộc",
-      }),
-      trangThai: Joi.string()
-        .valid("hoat_dong", "bao_tri", "ngung_hoat_dong")
-        .optional(),
+        trangThai: Joi.string()
+          .valid("hoat_dong", "bao_tri", "ngung_hoat_dong")
+          .optional()
+          .allow(null),
+      });
+    } else {
+      // Schema cho CREATE: required fields
+      schema = Joi.object({
+        bienSoXe: Joi.string()
+          .pattern(/^[0-9]{2}[A-Z]{1,2}-[0-9]{4,5}$/)
+          .required()
+          .messages({
+            "string.pattern.base": "Biển số xe không hợp lệ (VD: 29A-12345)",
+            "any.required": "Biển số xe là bắt buộc",
+          }),
+        dongXe: Joi.string().max(50).optional().allow(null, ""),
+        sucChua: Joi.number().integer().min(8).max(100).required().messages({
+          "number.min": "Sức chứa phải từ 8 đến 100 người",
+          "number.max": "Sức chứa phải từ 8 đến 100 người",
+          "any.required": "Sức chứa là bắt buộc",
+        }),
+        trangThai: Joi.string()
+          .valid("hoat_dong", "bao_tri", "ngung_hoat_dong")
+          .optional(),
+      });
+    }
+
+    // Loại bỏ empty strings trước khi validate (nhưng giữ null nếu có)
+    // Empty string có nghĩa là không update field đó
+    const cleanedBody = {};
+    Object.keys(req.body).forEach(key => {
+      const value = req.body[key];
+      // Chỉ loại bỏ empty string, giữ lại null và undefined (để Joi xử lý)
+      if (value !== "") {
+        cleanedBody[key] = value;
+      }
+      // Nếu value là empty string, không thêm vào cleanedBody (field sẽ không được update)
     });
 
-    const { error } = schema.validate(req.body);
+    // Kiểm tra nếu là UPDATE và không có field nào để update
+    if (isUpdate && Object.keys(cleanedBody).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Dữ liệu không hợp lệ",
+        errors: ["Cần có ít nhất một trường để cập nhật"],
+      });
+    }
+
+    const { error, value } = schema.validate(cleanedBody, { 
+      abortEarly: false,
+      stripUnknown: true 
+    });
+    
     if (error) {
       return res.status(400).json({
         success: false,
@@ -30,6 +83,10 @@ class ValidationMiddleware {
         errors: error.details.map((detail) => detail.message),
       });
     }
+    
+    // Cập nhật req.body với cleaned data
+    req.body = value;
+    
     next();
   }
 

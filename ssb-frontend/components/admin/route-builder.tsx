@@ -315,7 +315,7 @@ export function RouteBuilder({
         }
 
         const map = new googleMaps.Map(mapRef.current, {
-          center: { lat: 10.77653, lng: 106.700981 },
+          center: { lat: 10.760064662799088, lng: 106.6822422067464 },
           zoom: 15, // 🔥 Tăng zoom level để hiển thị rõ từng marker riêng lẻ
           minZoom: 12, // 🔥 Tăng minZoom để tránh clustering khi zoom out
           maxZoom: 20, // Cho phép zoom in để thấy rõ từng marker

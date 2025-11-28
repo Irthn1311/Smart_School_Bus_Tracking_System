@@ -16,7 +16,6 @@ import {
   UserCircle,
   Settings,
   ShieldCheck,
-  Zap,
 } from "lucide-react"
 
 export function AdminSidebar() {
@@ -28,7 +27,6 @@ export function AdminSidebar() {
     { name: t("sidebar.busManagement"), href: "/admin/buses", icon: Bus },
     { name: t("sidebar.driverManagement"), href: "/admin/drivers", icon: UserCircle },
     { name: t("sidebar.studentManagement"), href: "/admin/students", icon: Users },
-    { name: t("sidebar.optimizeStops"), href: "/admin/bus-stop-optimization", icon: Zap },
     { name: t("sidebar.routeManagement"), href: "/admin/routes", icon: Route },
     { name: t("sidebar.scheduleAssignment"), href: "/admin/schedule", icon: Calendar },
   ]

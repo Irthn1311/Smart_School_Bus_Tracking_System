@@ -204,12 +204,14 @@ class ClusteringRoutingService {
   /**
    * Rebalance clusters để đảm bảo size constraints
    * Di chuyển học sinh từ cluster lớn sang cluster nhỏ
+   * Chấp nhận cluster có >= 50% capacity (không nhất thiết phải đủ 100%)
    * @private
    */
   static _rebalanceClusters(clusters, capacity) {
     let changed = true;
     let iterations = 0;
     const maxRebalanceIterations = 50;
+    const minCapacity = Math.ceil(capacity * 0.5); // Tối thiểu 50% sức chứa
 
     while (changed && iterations < maxRebalanceIterations) {
       changed = false;
@@ -244,10 +246,48 @@ class ClusteringRoutingService {
           }
         }
       }
+      
+      // 🔥 Nếu cluster nhỏ nhất < 50% capacity và có cluster lớn hơn, di chuyển học sinh
+      // Chỉ di chuyển nếu cluster nhỏ nhất < minCapacity VÀ cluster lớn nhất > minCapacity
+      if (smallestCluster.size < minCapacity && largestCluster.size > minCapacity && clusters.length > 1) {
+        const needed = minCapacity - smallestCluster.size;
+        const available = largestCluster.size - minCapacity;
+        const toMove = Math.min(needed, available);
+        
+        if (toMove > 0) {
+          const sourceCluster = clusters[largestCluster.index];
+          const targetCluster = clusters[smallestCluster.index];
+          
+          const studentsToMove = this._selectStudentsToMove(
+            sourceCluster,
+            targetCluster,
+            toMove
+          );
+          
+          for (const student of studentsToMove) {
+            const index = sourceCluster.indexOf(student);
+            if (index > -1) {
+              sourceCluster.splice(index, 1);
+              targetCluster.push(student);
+              changed = true;
+            }
+          }
+        }
+      }
     }
 
-    // Loại bỏ clusters rỗng
-    return clusters.filter((c) => c.length > 0);
+    // Loại bỏ clusters rỗng (nhưng giữ lại clusters nhỏ, miễn là có >= 1 học sinh)
+    // Chấp nhận clusters có < 50% capacity nếu không thể rebalance được
+    const filteredClusters = clusters.filter((c) => c.length > 0);
+    
+    // Log cảnh báo nếu có clusters nhỏ hơn 50% capacity
+    const smallClusters = filteredClusters.filter((c) => c.length < minCapacity);
+    if (smallClusters.length > 0) {
+      console.log(`[ClusteringRouting] ⚠️ Found ${smallClusters.length} clusters with < ${minCapacity} students (${Math.round(minCapacity / capacity * 100)}% capacity)`);
+      console.log(`[ClusteringRouting] Small clusters sizes:`, smallClusters.map(c => c.length));
+    }
+    
+    return filteredClusters;
   }
 
   /**
@@ -362,10 +402,13 @@ class ClusteringRoutingService {
   }
 
   /**
-   * TSP Routing cho một cluster (Nearest Neighbor heuristic)
+   * TSP Routing cho một cluster
+   * 🔥 QUAN TRỌNG: Không dùng Nearest Neighbor vì sẽ tạo thứ tự từ gần đến xa
+   * Thay vào đó, sắp xếp theo khoảng cách từ XA đến GẦN depot (trường học)
+   * Route sẽ đi từ điểm xa nhất → các điểm gần hơn → trường học
    * @param {Array} stops - Danh sách điểm dừng trong cluster [{maDiem, tenDiem, viDo, kinhDo, ...}]
    * @param {Object} depot - {lat, lng} - Điểm xuất phát và kết thúc (trường học)
-   * @returns {Array} Route - Thứ tự điểm dừng đã được sắp xếp tối ưu
+   * @returns {Array} Route - Thứ tự điểm dừng đã được sắp xếp từ XA đến GẦN depot
    */
   static routeCluster(stops, depot) {
     if (stops.length === 0) {
@@ -380,47 +423,31 @@ class ClusteringRoutingService {
       `[ClusteringRouting] Routing cluster: ${stops.length} stops, depot=(${depot.lat}, ${depot.lng})`
     );
 
-    // Nearest Neighbor heuristic
-    const route = [];
-    const unvisited = [...stops];
-    let current = depot;
+    // 🔥 Sắp xếp theo khoảng cách từ XA đến GẦN depot (trường học)
+    // Điểm đầu tiên = điểm xa nhất, điểm cuối = điểm gần nhất
+    const sortedStops = [...stops].sort((a, b) => {
+      const distA = this.calculateDistanceMeters(
+        depot.lat,
+        depot.lng,
+        parseFloat(a.viDo),
+        parseFloat(a.kinhDo)
+      );
+      const distB = this.calculateDistanceMeters(
+        depot.lat,
+        depot.lng,
+        parseFloat(b.viDo),
+        parseFloat(b.kinhDo)
+      );
+      return distB - distA; // Xa nhất trước, gần nhất sau
+    });
 
-    while (unvisited.length > 0) {
-      let nearest = null;
-      let nearestDistance = Infinity;
-      let nearestIndex = -1;
+    console.log(`[ClusteringRouting] Sorted stops from farthest to nearest:`, sortedStops.map((s, idx) => ({
+      index: idx + 1,
+      maDiem: s.maDiem,
+      distance: (this.calculateDistanceMeters(depot.lat, depot.lng, parseFloat(s.viDo), parseFloat(s.kinhDo)) / 1000).toFixed(2) + 'km'
+    })));
 
-      for (let i = 0; i < unvisited.length; i++) {
-        const stop = unvisited[i];
-        const distance = this.calculateDistanceMeters(
-          current.lat,
-          current.lng,
-          parseFloat(stop.viDo),
-          parseFloat(stop.kinhDo)
-        );
-
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearest = stop;
-          nearestIndex = i;
-        }
-      }
-
-      if (nearest) {
-        route.push(nearest);
-        unvisited.splice(nearestIndex, 1);
-        current = {
-          lat: parseFloat(nearest.viDo),
-          lng: parseFloat(nearest.kinhDo),
-        };
-      } else {
-        // Fallback: thêm tất cả còn lại
-        route.push(...unvisited);
-        break;
-      }
-    }
-
-    return route;
+    return sortedStops;
   }
 
   /**
@@ -438,7 +465,7 @@ class ClusteringRoutingService {
    */
   static async solveClusteringVRP(options = {}) {
     const {
-      school_location = { lat: 10.77653, lng: 106.700981 }, // Đại học Sài Gòn
+      school_location = { lat: 10.760064662799088, lng: 106.6822422067464 }, // Đại học Sài Gòn
       r_walk = 500,
       s_max = 25,
       c_bus = 40,

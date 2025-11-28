@@ -182,8 +182,8 @@ async function testOptimizeVRP() {
   try {
     const payload = {
       depot: {
-        lat: 10.77653,
-        lng: 106.700981,
+        lat: 10.760064662799088,
+        lng: 106.6822422067464,
       },
       capacity: 40,
       split_virtual_nodes: true,
@@ -234,8 +234,8 @@ async function testOptimizeFull() {
   try {
     const payload = {
       school_location: {
-        lat: 10.77653,
-        lng: 106.700981,
+        lat: 10.760064662799088,
+        lng: 106.6822422067464,
       },
       r_walk: 500,
       s_max: 25,

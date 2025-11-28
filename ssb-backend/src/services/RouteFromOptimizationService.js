@@ -16,6 +16,7 @@ import RouteStopModel from "../models/RouteStopModel.js";
 import MapsService from "./MapsService.js";
 import VehicleRoutingService from "./VehicleRoutingService.js";
 import GeoUtils from "../utils/GeoUtils.js";
+import StopSuggestionService from "./StopSuggestionService.js";
 import pool from "../config/db.js";
 
 class RouteFromOptimizationService {
@@ -33,10 +34,13 @@ class RouteFromOptimizationService {
   static async createRoutesFromVRP(options = {}) {
     const {
       vrpResult = null,
-      depot = { lat: 10.77653, lng: 106.700981, name: "Đại học Sài Gòn" },
+      depot = { lat: 10.760064662799088, lng: 106.6822422067464, name: "Đại học Sài Gòn" },
       capacity = 40,
       routeNamePrefix = "Tuyến Tối Ưu",
       createReturnRoutes = true,
+      clearExistingRoutes = false, // Option to clear existing routes with same prefix before creating
+      maxRoutes = 4, // Số lượng tuyến tối đa được tạo (mặc định: 4)
+      maxRouteDistance = 50, // km - Giới hạn quãng đường tối đa của một tuyến (mặc định: 50km)
     } = options;
 
     console.log(`[RouteFromOptimization] Starting route creation from VRP`);
@@ -66,22 +70,127 @@ class RouteFromOptimizationService {
     }
 
     console.log(`[RouteFromOptimization] Found ${vrp.routes.length} routes in VRP result`);
+    console.log(`[RouteFromOptimization] Max routes limit: ${maxRoutes}`);
+    
+    // Giới hạn số lượng routes được tạo
+    const routesToCreate = vrp.routes.slice(0, maxRoutes);
+    const skippedRoutes = vrp.routes.length - routesToCreate.length;
+    
+    if (skippedRoutes > 0) {
+      console.log(`[RouteFromOptimization] ⚠️ Limiting to ${maxRoutes} routes (skipping ${skippedRoutes} routes)`);
+    }
+    
+    if (routesToCreate.length < maxRoutes && vrp.routes.length > 0) {
+      console.log(`[RouteFromOptimization] ℹ️ Only ${routesToCreate.length} routes available (less than maxRoutes=${maxRoutes})`);
+    }
+    
+    console.log(`[RouteFromOptimization] VRP routes details (will create ${routesToCreate.length}):`, routesToCreate.map((r, idx) => ({
+      index: idx + 1,
+      nodeCount: r.nodes?.length || 0,
+      totalDemand: r.totalDemand || 0,
+    })));
+
+    // Tìm và phân loại tuyến cũ từ optimization
+    const oldRoutesResult = await this.findAndCleanOldRoutes(routeNamePrefix, {
+      autoDelete: clearExistingRoutes,
+    });
+    
+    // Lưu thông tin tuyến cũ để trả về cho frontend
+    const oldRoutesInfo = oldRoutesResult.action !== 'none' ? {
+      canDelete: oldRoutesResult.canDelete,
+      cannotDelete: oldRoutesResult.cannotDelete,
+    } : undefined;
 
     const createdRoutes = [];
     const errors = [];
+    const createdRouteNames = new Set(); // Track created route names to avoid duplicates in this session
+
+    // Tạo từng tuyến đường (chỉ tạo số lượng giới hạn)
+    // Xử lý tách routes nếu vượt quá maxRouteDistance
+    // 🔥 QUAN TRỌNG: Kiểm tra độ dài thực tế sau khi tính polyline, không chỉ dựa vào estimatedDistance
+    const finalRoutesToCreate = [];
+    const routesToProcess = [...routesToCreate];
+    
+    // Xử lý từng route và tách nếu cần
+    while (routesToProcess.length > 0) {
+      const vrpRoute = routesToProcess.shift();
+      
+      // Tính độ dài thực tế từ Maps API trước khi quyết định có tách hay không
+      let actualDistance = vrpRoute.estimatedDistance || 0;
+      
+      // Nếu có maxRouteDistance, tính độ dài thực tế từ Maps API để kiểm tra chính xác
+      if (maxRouteDistance && vrpRoute.nodes && vrpRoute.nodes.length > 0) {
+        try {
+          // Tính polyline và độ dài thực tế từ Maps API
+          const { distance } = await this.computePolylineForRoute({
+            route: vrpRoute,
+            depot,
+            routeIndex: finalRoutesToCreate.length + routesToProcess.length + 1,
+          });
+          
+          // Sử dụng độ dài thực tế từ Maps API
+          if (distance > 0) {
+            actualDistance = distance;
+            console.log(`[RouteFromOptimization] Route actual distance from Maps API: ${actualDistance.toFixed(2)}km (estimated: ${(vrpRoute.estimatedDistance || 0).toFixed(2)}km)`);
+          }
+        } catch (error) {
+          console.warn(`[RouteFromOptimization] Could not compute actual distance for route:`, error.message);
+          // Fallback to estimatedDistance
+          actualDistance = vrpRoute.estimatedDistance || 0;
+        }
+      }
+      
+      // Kiểm tra và tách route nếu quá dài (dựa trên độ dài thực tế từ Maps API)
+      if (maxRouteDistance && actualDistance > maxRouteDistance) {
+        console.log(`[RouteFromOptimization] ⚠️ Route actual distance (${actualDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km), splitting...`);
+        // Tách route thành nhiều routes nhỏ hơn
+        const splitRoutes = await this.splitRouteIfTooLong({
+          vrpRoute,
+          depot,
+          maxRouteDistance,
+          routeNamePrefix,
+          createdRouteNames,
+          routeIndex: finalRoutesToCreate.length + routesToProcess.length + 1,
+        });
+        
+        // Thêm các routes đã tách vào queue để xử lý tiếp (kiểm tra lại độ dài)
+        routesToProcess.unshift(...splitRoutes);
+      } else {
+        finalRoutesToCreate.push(vrpRoute);
+      }
+    }
+
+    console.log(`[RouteFromOptimization] After distance check: ${finalRoutesToCreate.length} routes to create (original: ${routesToCreate.length})`);
 
     // Tạo từng tuyến đường
-    for (let i = 0; i < vrp.routes.length; i++) {
-      const vrpRoute = vrp.routes[i];
+    for (let i = 0; i < finalRoutesToCreate.length; i++) {
+      const vrpRoute = finalRoutesToCreate[i];
       try {
-        console.log(`[RouteFromOptimization] Creating route ${i + 1}/${vrp.routes.length}...`);
+        console.log(`[RouteFromOptimization] Creating route ${i + 1}/${finalRoutesToCreate.length}...`);
+        console.log(`[RouteFromOptimization] Route ${i + 1} has ${vrpRoute.nodes?.length || 0} nodes, estimated distance: ${(vrpRoute.estimatedDistance || 0).toFixed(2)}km`);
         
         const route = await this.createSingleRoute({
           vrpRoute,
           routeIndex: i + 1,
           depot,
           routeNamePrefix,
+          createdRouteNames, // Pass set to track names
+          maxRouteDistance, // Pass để kiểm tra độ dài thực tế
         });
+        
+        // 🔥 Kiểm tra độ dài thực tế sau khi tạo route
+        if (maxRouteDistance && route && route.estimatedDistance) {
+          const actualRouteDistance = route.estimatedDistance; // Độ dài thực tế từ Maps API (km)
+          if (actualRouteDistance > maxRouteDistance) {
+            console.warn(`[RouteFromOptimization] ⚠️ Route ${i + 1} actual distance (${actualRouteDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km) after creation!`);
+            console.warn(`[RouteFromOptimization] Route was created but may need manual adjustment or re-optimization`);
+          }
+        }
+
+        if (route && route.tenTuyen) {
+          createdRouteNames.add(route.tenTuyen);
+          console.log(`[RouteFromOptimization] ✅ Created route: ${route.tenTuyen} (ID: ${route.maTuyen})`);
+        }
 
         createdRoutes.push(route);
 
@@ -94,7 +203,14 @@ class RouteFromOptimizationService {
             depot,
             routeNamePrefix,
             originalRouteId: route.maTuyen,
+            createdRouteNames, // Pass set to track names
           });
+          
+          if (returnRoute && returnRoute.tenTuyen) {
+            createdRouteNames.add(returnRoute.tenTuyen);
+            console.log(`[RouteFromOptimization] ✅ Created return route: ${returnRoute.tenTuyen} (ID: ${returnRoute.maTuyen})`);
+          }
+          
           createdRoutes.push(returnRoute);
         }
       } catch (error) {
@@ -117,100 +233,425 @@ class RouteFromOptimizationService {
       routes: createdRoutes,
       stats,
       errors: errors.length > 0 ? errors : undefined,
+      oldRoutes: oldRoutesInfo, // Thông tin tuyến cũ để frontend hiển thị dialog
     };
   }
 
   /**
-   * Tạo một tuyến đường đi (depot → stops → depot)
+   * Tính khoảng cách từ depot đến điểm dừng (km)
    */
-  static async createSingleRoute({ vrpRoute, routeIndex, depot, routeNamePrefix }) {
-    const nodes = vrpRoute.nodes || [];
+  static calculateDistanceFromDepot(depot, stop) {
+    return StopSuggestionService.calculateDistance(
+      depot.lat,
+      depot.lng,
+      parseFloat(stop.viDo),
+      parseFloat(stop.kinhDo)
+    );
+  }
+
+  /**
+   * Lấy ID thực của stop (xử lý virtual nodes)
+   * @param {Object} node - Node có thể là virtual hoặc real
+   * @returns {string|number} - ID thực của stop trong DB
+   */
+  static getRealStopId(node) {
+    if (!node) return null;
+    // Nếu là virtual node, dùng originalStopId
+    if (node.isVirtual && node.originalStopId) {
+      return node.originalStopId;
+    }
+    // Nếu có originalStopId (ngay cả khi không phải virtual), dùng nó
+    if (node.originalStopId) {
+      return node.originalStopId;
+    }
+    // Ngược lại, dùng maDiem
+    return node.maDiem;
+  }
+
+  /**
+   * Gộp các virtual nodes từ cùng một stop vật lý
+   * @param {Array} nodes - Danh sách nodes (có thể có virtual nodes)
+   * @returns {Array} - Danh sách nodes đã được deduplicate
+   */
+  static deduplicateNodesByOriginalStop(nodes) {
+    if (!nodes || nodes.length === 0) return [];
+    
+    const stopMap = new Map(); // Map: realStopId -> node
+    
+    for (const node of nodes) {
+      const realStopId = this.getRealStopId(node);
+      
+      if (!stopMap.has(realStopId)) {
+        // Node đầu tiên của stop này - giữ lại
+        stopMap.set(realStopId, {
+          ...node,
+          maDiem: realStopId, // Đảm bảo maDiem là ID thực
+          originalStopId: realStopId,
+          isVirtual: false, // Sau khi deduplicate, không còn là virtual
+          demand: node.demand || 0, // Demand sẽ được tổng hợp sau
+        });
+      } else {
+        // Đã có node của stop này - tổng hợp demand
+        const existingNode = stopMap.get(realStopId);
+        existingNode.demand = (existingNode.demand || 0) + (node.demand || 0);
+      }
+    }
+    
+    return Array.from(stopMap.values());
+  }
+
+  /**
+   * Tìm điểm dừng xa nhất từ depot
+   */
+  static findFarthestStop(nodes, depot) {
+    if (nodes.length === 0) return null;
+    
+    let farthestStop = nodes[0];
+    let maxDistance = RouteFromOptimizationService.calculateDistanceFromDepot(depot, nodes[0]);
+    
+    for (let i = 1; i < nodes.length; i++) {
+      const distance = RouteFromOptimizationService.calculateDistanceFromDepot(depot, nodes[i]);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        farthestStop = nodes[i];
+      }
+    }
+    
+    return farthestStop;
+  }
+
+  /**
+   * Tính polyline và độ dài thực tế cho route (chỉ để preview, không lưu DB)
+   * @param {Object} options - {route, depot, routeIndex}
+   * @returns {Promise<{polyline: string|null, distance: number}>} Polyline string và độ dài thực tế (km)
+   */
+  static async computePolylineForRoute({ route, depot, routeIndex }) {
+    let nodes = route.nodes || [];
+    
+    if (nodes.length === 0) {
+      return { polyline: null, distance: 0 };
+    }
+
+    // Deduplicate virtual nodes
+    nodes = this.deduplicateNodesByOriginalStop(nodes);
+
+    // Tìm điểm dừng xa nhất
+    const farthestStop = RouteFromOptimizationService.findFarthestStop(nodes, depot);
+    const farthestStopRealId = this.getRealStopId(farthestStop);
+    
+    const origin = {
+      lat: parseFloat(farthestStop.viDo),
+      lng: parseFloat(farthestStop.kinhDo),
+    };
+    
+    const destination = depot;
+
+    // Sắp xếp nodes từ xa đến gần
+    const remainingNodes = nodes.filter(n => this.getRealStopId(n) !== farthestStopRealId);
+    const sortedRemainingNodes = [...remainingNodes].sort((a, b) => {
+      const distA = this.calculateDistanceFromDepot(depot, a);
+      const distB = this.calculateDistanceFromDepot(depot, b);
+      return distB - distA; // Xa nhất trước
+    });
+    
+    const finalWaypoints = sortedRemainingNodes.map((node) => ({
+      location: `${node.viDo},${node.kinhDo}`,
+    }));
+
+    try {
+      const directionsResult = await MapsService.getDirections({
+        origin: `${origin.lat},${origin.lng}`,
+        destination: `${destination.lat},${destination.lng}`,
+        waypoints: finalWaypoints.length > 0 ? finalWaypoints : undefined,
+        mode: "driving",
+        vehicleType: "bus",
+        optimize: false,
+      });
+      
+      const actualDistance = directionsResult.distance ? directionsResult.distance / 1000 : 0; // Convert meters to km
+      
+      return {
+        polyline: directionsResult.polyline || null,
+        distance: actualDistance,
+      };
+    } catch (error) {
+      console.warn(`[RouteFromOptimization] Error computing polyline for route ${routeIndex}:`, error.message);
+      return { polyline: null, distance: 0 };
+    }
+  }
+
+  /**
+   * Tách route thành nhiều routes nhỏ hơn nếu vượt quá maxRouteDistance
+   * @param {Object} options - {vrpRoute, depot, maxRouteDistance, routeNamePrefix, createdRouteNames, routeIndex}
+   * @returns {Promise<Array>} Array of routes
+   */
+  static async splitRouteIfTooLong({ vrpRoute, depot, maxRouteDistance, routeNamePrefix, createdRouteNames, routeIndex }) {
+    let nodes = vrpRoute.nodes || [];
+    
+    if (nodes.length === 0) {
+      return [];
+    }
+
+    // Deduplicate virtual nodes
+    nodes = this.deduplicateNodesByOriginalStop(nodes);
+
+    // Tính độ dài tuyến hiện tại
+    const routeDistance = vrpRoute.estimatedDistance || 0; // km
+    
+    // Nếu tuyến không vượt quá giới hạn, trả về route gốc
+    if (routeDistance <= maxRouteDistance) {
+      return [vrpRoute];
+    }
+
+    console.log(`[RouteFromOptimization] ⚠️ Route ${routeIndex} distance (${routeDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km), splitting...`);
+
+    // Tách route thành nhiều routes nhỏ hơn
+    // Sắp xếp nodes theo khoảng cách từ depot (xa nhất trước)
+    const sortedNodes = [...nodes].sort((a, b) => {
+      const distA = this.calculateDistanceFromDepot(depot, a);
+      const distB = this.calculateDistanceFromDepot(depot, b);
+      return distB - distA; // Xa nhất trước
+    });
+
+    const splitRoutes = [];
+    let currentRouteNodes = [];
+    let splitRouteIndex = 1;
+
+    // Tính độ dài thực tế cho từng route nhỏ bằng cách tính polyline
+    for (let i = 0; i < sortedNodes.length; i++) {
+      const node = sortedNodes[i];
+      const testRouteNodes = [...currentRouteNodes, node];
+      
+      // Tính độ dài thực tế của route nếu thêm node này
+      let testRouteDistance = 0;
+      if (testRouteNodes.length > 0) {
+        try {
+          // Tạo test route để tính độ dài thực tế
+          const testRoute = {
+            ...vrpRoute,
+            nodes: testRouteNodes,
+          };
+          
+          const { distance } = await this.computePolylineForRoute({
+            route: testRoute,
+            depot,
+            routeIndex: `${routeIndex}_test_${splitRouteIndex}`,
+          });
+          
+          testRouteDistance = distance || 0;
+        } catch (error) {
+          // Nếu không tính được, dùng ước tính đơn giản
+          const farthestNode = testRouteNodes[0];
+          const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
+          testRouteDistance = farthestDist * 2; // Đi và về từ depot
+        }
+      }
+
+      // Nếu thêm node này sẽ vượt quá giới hạn và đã có nodes trong route hiện tại
+      if (testRouteDistance > maxRouteDistance && currentRouteNodes.length > 0) {
+        // Tính độ dài thực tế của route hiện tại
+        let currentRouteDistance = 0;
+        try {
+          const currentRoute = {
+            ...vrpRoute,
+            nodes: currentRouteNodes,
+          };
+          const { distance } = await this.computePolylineForRoute({
+            route: currentRoute,
+            depot,
+            routeIndex: `${routeIndex}_${splitRouteIndex}`,
+          });
+          currentRouteDistance = distance || 0;
+        } catch (error) {
+          // Fallback to estimated distance
+          const farthestNode = currentRouteNodes[0];
+          const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
+          currentRouteDistance = farthestDist * 2;
+        }
+        
+        // Tạo route từ các nodes hiện tại
+        splitRoutes.push({
+          ...vrpRoute,
+          nodes: [...currentRouteNodes],
+          routeId: `${vrpRoute.routeId || routeIndex}_${splitRouteIndex}`,
+          estimatedDistance: currentRouteDistance,
+        });
+        
+        // Bắt đầu route mới với node hiện tại
+        currentRouteNodes = [node];
+        splitRouteIndex++;
+      } else {
+        // Thêm node vào route hiện tại
+        currentRouteNodes.push(node);
+      }
+    }
+
+    // Thêm route cuối cùng nếu còn nodes
+    if (currentRouteNodes.length > 0) {
+      // Tính độ dài thực tế của route cuối cùng
+      let finalRouteDistance = 0;
+      try {
+        const finalRoute = {
+          ...vrpRoute,
+          nodes: currentRouteNodes,
+        };
+        const { distance } = await this.computePolylineForRoute({
+          route: finalRoute,
+          depot,
+          routeIndex: `${routeIndex}_${splitRouteIndex}`,
+        });
+        finalRouteDistance = distance || 0;
+      } catch (error) {
+        // Fallback to estimated distance
+        const farthestNode = currentRouteNodes[0];
+        const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
+        finalRouteDistance = farthestDist * 2;
+      }
+      
+      splitRoutes.push({
+        ...vrpRoute,
+        nodes: currentRouteNodes,
+        routeId: `${vrpRoute.routeId || routeIndex}_${splitRouteIndex}`,
+        estimatedDistance: finalRouteDistance,
+      });
+    }
+
+    console.log(`[RouteFromOptimization] ✅ Split route ${routeIndex} into ${splitRoutes.length} routes`);
+    
+    return splitRoutes;
+  }
+
+  /**
+   * Tạo một tuyến đường đi (điểm xa nhất → stops → trường SGU)
+   * Tuyến đi: bắt đầu từ điểm dừng xa nhất, kết thúc tại trường SGU
+   */
+  static async createSingleRoute({ vrpRoute, routeIndex, depot, routeNamePrefix, createdRouteNames = null, maxRouteDistance = null }) {
+    let nodes = vrpRoute.nodes || [];
     
     if (nodes.length === 0) {
       throw new Error("Route has no stops");
     }
 
-    // Origin = depot (trường học) - bắt đầu từ trường
-    const origin = depot;
-    // Destination = stop cuối cùng (để tạo polyline từ depot → stops)
-    const lastStop = nodes[nodes.length - 1];
-    const destination = {
-      lat: parseFloat(lastStop.viDo),
-      lng: parseFloat(lastStop.kinhDo),
+    // 🔥 QUAN TRỌNG: Deduplicate virtual nodes trước khi xử lý
+    nodes = this.deduplicateNodesByOriginalStop(nodes);
+    console.log(`[RouteFromOptimization] After deduplication: ${nodes.length} unique stops`);
+
+    // Tìm điểm dừng xa nhất từ trường (điểm bắt đầu của tuyến đi)
+    const farthestStop = RouteFromOptimizationService.findFarthestStop(nodes, depot);
+    const farthestStopRealId = this.getRealStopId(farthestStop); // Lấy ID thực một lần
+    
+    // Tuyến đi: điểm bắt đầu = điểm dừng xa nhất, điểm kết thúc = trường SGU
+    const origin = {
+      lat: parseFloat(farthestStop.viDo),
+      lng: parseFloat(farthestStop.kinhDo),
+      name: farthestStop.tenDiem || `Điểm dừng ${farthestStopRealId}`,
+      address: null,
     };
+    
+    const destination = depot; // Trường SGU là điểm kết thúc
 
-    // Tên tuyến
-    const tenTuyen = `${routeNamePrefix} ${routeIndex} - Đi`;
+    // Tên tuyến - thống nhất format: dùng " - Đi" (giữ format cũ cho tuyến đi)
+    // Tuyến về sẽ dùng " (Về)" để phân biệt
+    let tenTuyen = `${routeNamePrefix} ${routeIndex} - Đi`;
+    tenTuyen = await this.generateUniqueRouteName(tenTuyen, createdRouteNames);
 
-    // Tạo polyline từ depot → stops (destination = stop cuối cùng)
-    const waypoints = nodes.slice(0, -1).map((node) => ({
+    // Sắp xếp nodes: bắt đầu từ điểm xa nhất, kết thúc tại trường
+    // Tạo thứ tự tối ưu: farthestStop → các điểm dừng khác → depot
+    const orderedNodes = [];
+    const remainingNodes = nodes.filter(n => this.getRealStopId(n) !== farthestStopRealId);
+    
+    // Bắt đầu từ điểm xa nhất
+    orderedNodes.push(farthestStop);
+    
+    // Thêm các điểm dừng còn lại (giữ thứ tự từ VRP nếu có thể)
+    // Nếu không, sắp xếp theo khoảng cách từ điểm xa nhất
+    orderedNodes.push(...remainingNodes);
+    
+    // Depot (trường) là điểm cuối cùng - không thêm vào waypoints
+    const waypoints = orderedNodes.slice(1).map((node) => ({
+      location: `${node.viDo},${node.kinhDo}`,
+    }));
+    
+    // Lưu mapping giữa waypoint index và node để cập nhật lại sau khi optimize
+    const waypointToNodeMap = new Map();
+    orderedNodes.slice(1).forEach((node, idx) => {
+      waypointToNodeMap.set(idx, node);
+    });
+
+    console.log(`[RouteFromOptimization] Getting directions for route: ${tenTuyen}`);
+    console.log(`[RouteFromOptimization] Origin (farthest stop): ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Destination (depot/school): ${destination.name} (${destination.lat}, ${destination.lng})`);
+    console.log(`[RouteFromOptimization] Waypoints (stops): ${waypoints.length}`);
+
+    // 🔥 QUAN TRỌNG: Sắp xếp các điểm dừng trung gian theo khoảng cách từ XA đến GẦN trường học
+    // KHÔNG optimize waypoints vì Google Maps sẽ tối ưu cho quãng đường ngắn nhất, không phải từ xa đến gần
+    // Tuyến đường đi: điểm xa nhất → các điểm gần hơn → trường học
+    const sortedRemainingNodes = [...remainingNodes].sort((a, b) => {
+      const distA = this.calculateDistanceFromDepot(depot, a);
+      const distB = this.calculateDistanceFromDepot(depot, b);
+      return distB - distA; // Xa nhất trước, gần nhất sau
+    });
+    
+    // Tạo thứ tự cuối cùng: farthestStop (xa nhất) → sortedRemainingNodes (từ xa đến gần) → depot (trường)
+    const finalOrderedNodes = [farthestStop, ...sortedRemainingNodes];
+    
+    console.log(`[RouteFromOptimization] Final nodes order (farthest → nearest → school):`, finalOrderedNodes.map((n, idx) => ({
+      sequence: idx + 1,
+      maDiem: n.maDiem,
+      tenDiem: n.tenDiem,
+      distance: this.calculateDistanceFromDepot(depot, n).toFixed(2) + 'km'
+    })));
+    
+    // Tạo waypoints từ các điểm trung gian (không bao gồm farthestStop và depot)
+    const finalWaypoints = sortedRemainingNodes.map((node) => ({
       location: `${node.viDo},${node.kinhDo}`,
     }));
 
     console.log(`[RouteFromOptimization] Getting directions for route: ${tenTuyen}`);
-    console.log(`[RouteFromOptimization] Origin (depot): (${origin.lat}, ${origin.lng})`);
-    console.log(`[RouteFromOptimization] Destination (last stop): (${destination.lat}, ${destination.lng})`);
-    console.log(`[RouteFromOptimization] Waypoints (stops): ${waypoints.length}`);
+    console.log(`[RouteFromOptimization] Origin (farthest stop): ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Destination (depot/school): ${destination.name} (${destination.lat}, ${destination.lng})`);
+    console.log(`[RouteFromOptimization] Waypoints (stops, từ xa đến gần): ${finalWaypoints.length}`);
 
-    // Lấy directions từ Google Maps API: depot → stops (destination = stop cuối cùng)
+    // Lấy directions từ Google Maps API: điểm xa nhất → stops (từ xa đến gần) → trường SGU
+    // KHÔNG optimize waypoints để giữ thứ tự từ xa đến gần
     const directionsResult = await MapsService.getDirections({
       origin: `${origin.lat},${origin.lng}`,
       destination: `${destination.lat},${destination.lng}`,
-      waypoints: waypoints, // Tất cả các điểm dừng trừ stop cuối (đã là destination)
+      waypoints: finalWaypoints.length > 0 ? finalWaypoints : undefined,
       mode: "driving",
       vehicleType: "bus",
-      optimizeWaypoints: false, // Giữ nguyên thứ tự từ VRP
+      optimize: false, // 🔥 KHÔNG optimize để giữ thứ tự từ xa đến gần
     });
+    
+    // Sử dụng finalOrderedNodes đã được sắp xếp
+    const optimizedNodes = finalOrderedNodes;
 
-    // Lấy polyline từ depot → stop cuối cùng
+    // Lấy polyline từ điểm xa nhất → stops → trường SGU
     let polyline = directionsResult.polyline;
     let estimatedTime = Math.round(directionsResult.duration / 60); // minutes
+    const routeDistanceKm = directionsResult.distance / 1000; // Convert meters to km
 
-    // Tạo polyline từ stop cuối → depot và nối vào polyline chính
-    try {
-      const returnDirectionsResult = await MapsService.getDirections({
-        origin: `${destination.lat},${destination.lng}`,
-        destination: `${origin.lat},${origin.lng}`,
-        mode: "driving",
-        vehicleType: "bus",
-      });
-
-      // Nối 2 polyline lại (decode, merge, encode)
-      // Sử dụng @mapbox/polyline để encode (decode đã có trong GeoUtils)
-      const path1 = GeoUtils.decodePolyline(polyline);
-      const path2 = GeoUtils.decodePolyline(returnDirectionsResult.polyline);
-      
-      // Merge paths (bỏ điểm cuối của path1 vì trùng với điểm đầu của path2)
-      const mergedPath = [...path1, ...path2.slice(1)];
-      
-      // Encode lại polyline (sử dụng @mapbox/polyline - tương thích với Google Maps encoding)
-      try {
-        const polylineLib = await import("@mapbox/polyline");
-        // @mapbox/polyline.encode() nhận mảng [lat, lng]
-        polyline = polylineLib.encode(mergedPath.map(p => [p.lat, p.lng]));
-        estimatedTime += Math.round(returnDirectionsResult.duration / 60);
-        console.log(`[RouteFromOptimization] ✅ Combined polyline: depot → stops → depot (${mergedPath.length} points)`);
-      } catch (encodeError) {
-        console.warn(`[RouteFromOptimization] ⚠️ Failed to encode merged polyline, using forward polyline only:`, encodeError.message);
-        // Nếu không encode được, chỉ dùng polyline đi (depot → stops)
-      }
-    } catch (error) {
-      console.warn(`[RouteFromOptimization] ⚠️ Failed to create return polyline, using one-way only:`, error.message);
-      // Nếu không tạo được return polyline, vẫn dùng polyline một chiều
+    // 🔥 Kiểm tra độ dài tuyến, nếu vượt quá giới hạn thì cảnh báo
+    if (maxRouteDistance && routeDistanceKm > maxRouteDistance) {
+      console.warn(`[RouteFromOptimization] ⚠️ Route ${routeIndex} actual distance (${routeDistanceKm.toFixed(2)}km) exceeds max (${maxRouteDistance}km)`);
+      console.warn(`[RouteFromOptimization] Route will still be created, but consider adjusting optimization parameters`);
+      // Không throw error, chỉ cảnh báo và tiếp tục tạo route
+      // Route đã được tách ở bước trước nếu cần (dựa trên estimatedDistance)
     }
 
     // Tạo điểm dừng depot nếu chưa có (cần cho route_stops)
     let depotStopId = await this.findOrCreateDepotStop(depot);
 
     // Tạo route trong DB
+    // Tuyến đi: diemBatDau = điểm xa nhất, diemKetThuc = trường SGU
     const routeId = await TuyenDuongModel.create({
       tenTuyen,
-      diemBatDau: origin.name || "Đại học Sài Gòn",
-      diemKetThuc: destination.name || "Đại học Sài Gòn",
+      diemBatDau: origin.name, // Điểm dừng xa nhất
+      diemKetThuc: destination.name || "Đại học Sài Gòn", // Trường SGU
       thoiGianUocTinh: estimatedTime,
-      origin_lat: origin.lat,
+      origin_lat: origin.lat, // Tọa độ điểm xa nhất
       origin_lng: origin.lng,
-      dest_lat: destination.lat,
+      dest_lat: destination.lat, // Tọa độ trường SGU
       dest_lng: destination.lng,
       polyline,
       trangThai: true,
@@ -218,99 +659,328 @@ class RouteFromOptimizationService {
     });
 
     console.log(`[RouteFromOptimization] ✅ Created route ${routeId}: ${tenTuyen}`);
+    console.log(`[RouteFromOptimization] Route start: ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Route end: ${destination.name} (${destination.lat}, ${destination.lng})`);
+    console.log(`[RouteFromOptimization] Route ${routeId} will be linked to return route later (if created)`);
 
-    // Thêm depot như điểm dừng đầu tiên (sequence 1)
-    await RouteStopModel.addStop(routeId, depotStopId, 1, 0);
+    // Helper function để thêm hoặc cập nhật điểm dừng
+    const addOrUpdateStop = async (stopId, seq, dwellSeconds) => {
+      try {
+        await RouteStopModel.addStop(routeId, stopId, seq, dwellSeconds);
+      } catch (error) {
+        if (error.message === "STOP_ALREADY_IN_ROUTE" || error.message === "SEQUENCE_ALREADY_EXISTS") {
+          // Nếu đã tồn tại, cập nhật sequence và dwell_seconds
+          console.log(`[RouteFromOptimization] Stop ${stopId} already in route, updating sequence to ${seq}`);
+          await RouteStopModel.updateStop(routeId, stopId, seq, dwellSeconds);
+        } else {
+          throw error;
+        }
+      }
+    };
 
-    // Gán các điểm dừng vào tuyến (bắt đầu từ sequence 2)
+    // 🔥 Gán các điểm dừng vào tuyến theo thứ tự: điểm xa nhất (sequence 1) → các điểm khác (từ xa đến gần) → trường SGU
     const stops = [];
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
+    let sequence = 1;
+    
+    // Loại bỏ trùng lặp trong optimizedNodes (tránh thêm cùng một điểm dừng nhiều lần)
+    // optimizedNodes đã được sắp xếp: [farthestStop, ...sortedRemainingNodes (từ xa đến gần)]
+    const uniqueOptimizedNodes = [];
+    const seenStopIds = new Set();
+    
+    // 🔥 Đảm bảo farthestStop luôn là điểm đầu tiên (nếu không trùng với depot)
+    if (optimizedNodes.length > 0 && this.getRealStopId(optimizedNodes[0]) === farthestStopRealId) {
+      uniqueOptimizedNodes.push(optimizedNodes[0]);
+      seenStopIds.add(farthestStopRealId);
+    }
+    
+    // Thêm các điểm còn lại (đã được sắp xếp từ xa đến gần)
+    for (const node of optimizedNodes) {
+      const nodeRealId = this.getRealStopId(node);
+      if (!seenStopIds.has(nodeRealId)) {
+        seenStopIds.add(nodeRealId);
+        uniqueOptimizedNodes.push(node);
+      }
+    }
+    
+    // 🔥 Verify: điểm đầu tiên phải là điểm xa nhất
+    console.log(`[RouteFromOptimization] Assigning stops to route_stops with sequence:`);
+    if (uniqueOptimizedNodes.length > 0) {
+      const firstNode = uniqueOptimizedNodes[0];
+      const firstDistance = this.calculateDistanceFromDepot(depot, firstNode);
+      console.log(`[RouteFromOptimization] Sequence 1 (farthest stop):`, {
+        maDiem: firstNode.maDiem,
+        tenDiem: firstNode.tenDiem,
+        distance: firstDistance.toFixed(2) + 'km'
+      });
       
-      // Kiểm tra điểm dừng có tồn tại không
-      const stop = await DiemDungModel.getById(node.maDiem);
+      // Verify điểm đầu tiên là xa nhất
+      const allDistances = uniqueOptimizedNodes.map(n => this.calculateDistanceFromDepot(depot, n));
+      const maxDistance = Math.max(...allDistances);
+      if (Math.abs(firstDistance - maxDistance) > 0.01) {
+        console.error(`[RouteFromOptimization] ❌ ERROR: First node is NOT the farthest! First: ${firstDistance.toFixed(2)}km, Max: ${maxDistance.toFixed(2)}km`);
+        // Sắp xếp lại để đảm bảo điểm xa nhất là đầu tiên
+        uniqueOptimizedNodes.sort((a, b) => {
+          const distA = this.calculateDistanceFromDepot(depot, a);
+          const distB = this.calculateDistanceFromDepot(depot, b);
+          return distB - distA; // Xa nhất trước
+        });
+        console.log(`[RouteFromOptimization] ✅ Re-sorted nodes to ensure farthest is first`);
+      }
+    }
+    
+    // Kiểm tra xem depot stop có trùng với farthest stop không
+    const isDepotSameAsFarthest = farthestStopRealId === depotStopId;
+    
+    // 1. Điểm dừng đầu tiên: điểm xa nhất (điểm bắt đầu) - chỉ thêm nếu không trùng với depot
+    if (!isDepotSameAsFarthest) {
+      const farthestStopData = await DiemDungModel.getById(farthestStopRealId);
+      if (farthestStopData) {
+        await addOrUpdateStop(farthestStopRealId, sequence, 30);
+        stops.push({
+          maDiem: farthestStopRealId,
+          tenDiem: farthestStop.tenDiem || farthestStopData.tenDiem,
+          viDo: farthestStop.viDo,
+          kinhDo: farthestStop.kinhDo,
+          sequence: sequence++,
+        });
+      }
+    } else {
+      console.log(`[RouteFromOptimization] ⚠️ Farthest stop is same as depot, skipping duplicate`);
+    }
+
+    // 2. Các điểm dừng còn lại (theo thứ tự đã được optimize, đã loại bỏ trùng lặp)
+    // Bỏ qua điểm đầu tiên (farthestStop) vì đã xử lý ở trên
+    for (const node of uniqueOptimizedNodes.slice(1)) {
+      const nodeRealId = this.getRealStopId(node);
+      // Bỏ qua nếu trùng với depot hoặc farthest stop
+      if (nodeRealId === depotStopId || nodeRealId === farthestStopRealId) {
+        continue;
+      }
+      
+      const stop = await DiemDungModel.getById(nodeRealId);
       if (!stop) {
-        console.warn(`[RouteFromOptimization] ⚠️ Stop ${node.maDiem} not found, skipping`);
+        console.warn(`[RouteFromOptimization] ⚠️ Stop ${nodeRealId} not found, skipping`);
         continue;
       }
 
-      // Tạo route_stop (sequence = i + 2 vì depot là sequence 1)
-      await RouteStopModel.addStop(routeId, node.maDiem, i + 2, 30);
-
+      await addOrUpdateStop(nodeRealId, sequence, 30);
       stops.push({
-        maDiem: node.maDiem,
-        tenDiem: node.tenDiem,
+        maDiem: nodeRealId,
+        tenDiem: node.tenDiem || stop.tenDiem,
         viDo: node.viDo,
         kinhDo: node.kinhDo,
-        sequence: i + 2,
+        sequence: sequence++,
       });
     }
 
-    // Thêm depot như điểm dừng cuối cùng (sequence = nodes.length + 2)
-    await RouteStopModel.addStop(routeId, depotStopId, nodes.length + 2, 0);
+    // 3. Điểm dừng cuối cùng: trường SGU (không đón học sinh, dwell_seconds = 0)
+    // Chỉ thêm nếu chưa có trong route (nếu farthest stop là depot thì đã có rồi)
+    if (!isDepotSameAsFarthest && !stops.some(s => s.maDiem === depotStopId)) {
+      await addOrUpdateStop(depotStopId, sequence, 0);
+      stops.push({
+        maDiem: depotStopId,
+        tenDiem: destination.name || "Đại học Sài Gòn",
+        viDo: destination.lat,
+        kinhDo: destination.lng,
+        sequence: sequence,
+      });
+    } else if (isDepotSameAsFarthest) {
+      // Nếu depot là farthest stop, đảm bảo nó ở cuối với dwell_seconds = 0
+      await addOrUpdateStop(depotStopId, sequence, 0);
+      // Cập nhật sequence của depot stop nếu đã có
+      const existingDepotIndex = stops.findIndex(s => s.maDiem === depotStopId);
+      if (existingDepotIndex >= 0) {
+        stops[existingDepotIndex].sequence = sequence;
+      } else {
+        stops.push({
+          maDiem: depotStopId,
+          tenDiem: destination.name || "Đại học Sài Gòn",
+          viDo: destination.lat,
+          kinhDo: destination.lng,
+          sequence: sequence,
+        });
+      }
+    }
 
-    console.log(`[RouteFromOptimization] ✅ Assigned ${stops.length + 2} stops to route ${routeId} (depot at start and end)`);
+    // 🔥 Verify thứ tự stops đã được gán đúng
+    const finalStopsOrder = stops.sort((a, b) => a.sequence - b.sequence);
+    console.log(`[RouteFromOptimization] ✅ Assigned ${stops.length} stops to route ${routeId}`);
+    console.log(`[RouteFromOptimization] Final stops order (sequence):`, finalStopsOrder.map(s => ({
+      sequence: s.sequence,
+      maDiem: s.maDiem,
+      tenDiem: s.tenDiem,
+      distance: s.sequence === 1 ? 'FARTHEST' : (s.sequence === finalStopsOrder.length ? 'SCHOOL' : this.calculateDistanceFromDepot(depot, s).toFixed(2) + 'km')
+    })));
+    
+    // 🔥 Verify điểm đầu tiên (sequence 1) là điểm xa nhất
+    if (finalStopsOrder.length > 0) {
+      const firstStop = finalStopsOrder[0];
+      const firstStopDistance = this.calculateDistanceFromDepot(depot, firstStop);
+      const allDistances = finalStopsOrder.map(s => this.calculateDistanceFromDepot(depot, s));
+      const maxDistance = Math.max(...allDistances);
+      
+      if (Math.abs(firstStopDistance - maxDistance) > 0.1) {
+        console.warn(`[RouteFromOptimization] ⚠️ WARNING: First stop (sequence 1) is NOT the farthest!`);
+        console.warn(`[RouteFromOptimization] First stop distance: ${firstStopDistance.toFixed(2)}km, Max distance: ${maxDistance.toFixed(2)}km`);
+      } else {
+        console.log(`[RouteFromOptimization] ✅ Verified: First stop (sequence 1) is the farthest (${firstStopDistance.toFixed(2)}km)`);
+      }
+    }
+
+    // 🔥 Tự động gán học sinh vào student_stop_suggestions sau khi thêm stops (giống như tạo thủ công)
+    try {
+      const RouteService = (await import("./RouteService.js")).default;
+      const routeStops = await RouteStopModel.getByRouteId(routeId);
+      if (routeStops.length > 0) {
+        const assignedCount = await RouteService.assignStudentsToStops(routeId, routeStops);
+        console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to route ${routeId} stops`);
+      }
+    } catch (assignError) {
+      console.warn(`[RouteFromOptimization] ⚠️ Failed to auto-assign students to route ${routeId}:`, assignError);
+      // Không throw error - route đã được tạo thành công
+    }
 
     return {
       maTuyen: routeId,
       tenTuyen,
-      diemBatDau: origin.name || "Đại học Sài Gòn",
-      diemKetThuc: destination.name || "Đại học Sài Gòn",
+      diemBatDau: origin.name, // Điểm xa nhất
+      diemKetThuc: destination.name || "Đại học Sài Gòn", // Trường SGU
       thoiGianUocTinh: estimatedTime,
-      stopCount: stops.length + 2, // +2 vì có depot ở đầu và cuối
+      stopCount: stops.length,
       totalDemand: vrpRoute.totalDemand || 0,
       stops,
     };
   }
 
   /**
-   * Tạo tuyến về (depot → stops ngược lại → depot)
+   * Tạo tuyến về (trường SGU → stops → điểm xa nhất)
+   * Tuyến về: bắt đầu từ trường SGU, kết thúc tại điểm dừng xa nhất
    */
-  static async createReturnRoute({ vrpRoute, routeIndex, depot, routeNamePrefix, originalRouteId }) {
-    const nodes = [...(vrpRoute.nodes || [])].reverse(); // Đảo ngược thứ tự
+  static async createReturnRoute({ vrpRoute, routeIndex, depot, routeNamePrefix, originalRouteId, createdRouteNames = null }) {
+    let nodes = vrpRoute.nodes || [];
     
     if (nodes.length === 0) {
       throw new Error("Route has no stops");
     }
 
-    // Origin = depot (trường học)
-    const origin = depot;
-    // Destination = điểm dừng đầu tiên (xa depot nhất trong tuyến đi)
-    const destination = nodes[nodes.length - 1]; // Điểm cuối cùng sau khi reverse
+    // 🔥 QUAN TRỌNG: Deduplicate virtual nodes trước khi xử lý
+    nodes = this.deduplicateNodesByOriginalStop(nodes);
+    console.log(`[RouteFromOptimization] Return route after deduplication: ${nodes.length} unique stops`);
 
-    // Tên tuyến
-    const tenTuyen = `${routeNamePrefix} ${routeIndex} - Về`;
+    // Tìm điểm dừng xa nhất từ trường (điểm kết thúc của tuyến về)
+    const farthestStop = RouteFromOptimizationService.findFarthestStop(nodes, depot);
+    const farthestStopRealId = this.getRealStopId(farthestStop); // Lấy ID thực một lần
 
-    // Tạo polyline từ origin → stops → destination
-    const waypoints = nodes.slice(0, -1).map((node) => ({
+    // Tuyến về: điểm bắt đầu = trường SGU, điểm kết thúc = điểm dừng xa nhất
+    const origin = depot; // Trường SGU là điểm bắt đầu
+    const destination = {
+      lat: parseFloat(farthestStop.viDo),
+      lng: parseFloat(farthestStop.kinhDo),
+      name: farthestStop.tenDiem || `Điểm dừng ${farthestStopRealId}`,
+      address: null,
+    };
+
+    // Tên tuyến - thống nhất format với tạo thủ công: dùng (Về) thay vì - Về
+    // Tìm tên tuyến đi tương ứng để tạo tên tuyến về
+    const originalRoute = await TuyenDuongModel.getById(originalRouteId);
+    let tenTuyen;
+    if (originalRoute && originalRoute.tenTuyen) {
+      const originalName = originalRoute.tenTuyen;
+      
+      // Xử lý các format khác nhau:
+      // 1. "Tuyến Tối Ưu X - Đi" -> "Tuyến Tối Ưu X (Về)"
+      // 2. "Tuyến Tối Ưu X - Đi Y" -> "Tuyến Tối Ưu X - Đi Y (Về)" (giữ nguyên số thứ tự nếu có)
+      // 3. Format khác -> thêm " (Về)" vào cuối
+      
+      if (originalName.endsWith(' - Đi')) {
+        // Format: "Tuyến Tối Ưu 1 - Đi" -> "Tuyến Tối Ưu 1 (Về)"
+        tenTuyen = originalName.replace(' - Đi', ' (Về)');
+      } else if (originalName.match(/\s-\sĐi\s\d+$/)) {
+        // Format: "Tuyến Tối Ưu 1 - Đi 2" -> "Tuyến Tối Ưu 1 - Đi 2 (Về)"
+        // Giữ nguyên số thứ tự, chỉ thêm (Về)
+        tenTuyen = `${originalName} (Về)`;
+      } else {
+        // Format khác: thêm " (Về)" vào cuối
+        tenTuyen = `${originalName} (Về)`;
+      }
+    } else {
+      // Fallback: tạo tên mới
+      tenTuyen = `${routeNamePrefix} ${routeIndex} (Về)`;
+    }
+    // Kiểm tra duplicate và tạo tên unique
+    tenTuyen = await this.generateUniqueRouteName(tenTuyen, createdRouteNames);
+
+    // Sắp xếp nodes: bắt đầu từ trường, kết thúc tại điểm xa nhất
+    const remainingNodes = nodes.filter(n => this.getRealStopId(n) !== farthestStopRealId);
+    const waypoints = remainingNodes.map((node) => ({
       location: `${node.viDo},${node.kinhDo}`,
     }));
 
     console.log(`[RouteFromOptimization] Getting directions for return route: ${tenTuyen}`);
+    console.log(`[RouteFromOptimization] Origin (depot/school): ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Destination (farthest stop): ${destination.name} (${destination.lat}, ${destination.lng})`);
+    console.log(`[RouteFromOptimization] Waypoints (stops): ${waypoints.length}`);
 
-    // Lấy directions từ Google Maps API
+    // 🔥 QUAN TRỌNG: Sắp xếp các điểm dừng trung gian theo khoảng cách từ GẦN đến XA trường học
+    // KHÔNG optimize waypoints vì cần giữ thứ tự từ gần đến xa
+    // Tuyến về: trường học → các điểm gần → điểm xa nhất
+    const sortedRemainingNodes = [...remainingNodes].sort((a, b) => {
+      const distA = this.calculateDistanceFromDepot(depot, a);
+      const distB = this.calculateDistanceFromDepot(depot, b);
+      return distA - distB; // Gần nhất trước, xa nhất sau
+    });
+    
+    // Tạo thứ tự cuối cùng: depot (trường) → sortedRemainingNodes (từ gần đến xa) → farthestStop (xa nhất)
+    const finalOrderedNodes = [depot, ...sortedRemainingNodes, farthestStop];
+    
+    console.log(`[RouteFromOptimization] Final return route nodes order (school → nearest → farthest):`, finalOrderedNodes.map((n, idx) => ({
+      sequence: idx + 1,
+      maDiem: n.maDiem || 'SCHOOL',
+      tenDiem: n.tenDiem || n.name || 'Đại học Sài Gòn',
+      distance: idx === 0 ? '0.00km' : this.calculateDistanceFromDepot(depot, n).toFixed(2) + 'km'
+    })));
+    
+    // Tạo waypoints từ các điểm trung gian (không bao gồm depot và farthestStop)
+    const finalWaypoints = sortedRemainingNodes.map((node) => ({
+      location: `${node.viDo},${node.kinhDo}`,
+    }));
+
+    console.log(`[RouteFromOptimization] Getting directions for return route: ${tenTuyen}`);
+    console.log(`[RouteFromOptimization] Origin (depot/school): ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Destination (farthest stop): ${destination.name} (${destination.lat}, ${destination.lng})`);
+    console.log(`[RouteFromOptimization] Waypoints (stops, từ gần đến xa): ${finalWaypoints.length}`);
+
+    // Lấy directions từ Google Maps API: trường SGU → stops (từ gần đến xa) → điểm xa nhất
+    // KHÔNG optimize waypoints để giữ thứ tự từ gần đến xa
     const directionsResult = await MapsService.getDirections({
       origin: `${origin.lat},${origin.lng}`,
-      destination: `${destination.viDo},${destination.kinhDo}`,
-      waypoints: waypoints,
+      destination: `${destination.lat},${destination.lng}`,
+      waypoints: finalWaypoints.length > 0 ? finalWaypoints : undefined,
       mode: "driving",
       vehicleType: "bus",
-      optimizeWaypoints: false,
+      optimize: false, // 🔥 KHÔNG optimize để giữ thứ tự từ gần đến xa
     });
+    
+    // Sử dụng sortedRemainingNodes đã được sắp xếp
+    const optimizedRemainingNodes = sortedRemainingNodes;
 
     const polyline = directionsResult.polyline;
     const estimatedTime = Math.round(directionsResult.duration / 60); // minutes
 
+    // Tạo điểm dừng depot nếu chưa có
+    let depotStopId = await this.findOrCreateDepotStop(depot);
+
     // Tạo route trong DB
+    // Tuyến về: diemBatDau = trường SGU, diemKetThuc = điểm xa nhất
     const routeId = await TuyenDuongModel.create({
       tenTuyen,
-      diemBatDau: origin.name || "Đại học Sài Gòn",
-      diemKetThuc: destination.tenDiem || `Điểm dừng ${destination.maDiem}`,
+      diemBatDau: origin.name || "Đại học Sài Gòn", // Trường SGU
+      diemKetThuc: destination.name, // Điểm dừng xa nhất
       thoiGianUocTinh: estimatedTime,
-      origin_lat: origin.lat,
+      origin_lat: origin.lat, // Tọa độ trường SGU
       origin_lng: origin.lng,
-      dest_lat: destination.viDo,
-      dest_lng: destination.kinhDo,
+      dest_lat: destination.lat, // Tọa độ điểm xa nhất
+      dest_lng: destination.lng,
       polyline,
       trangThai: true,
       routeType: "ve",
@@ -318,47 +988,341 @@ class RouteFromOptimizationService {
     });
 
     console.log(`[RouteFromOptimization] ✅ Created return route ${routeId}: ${tenTuyen}`);
+    console.log(`[RouteFromOptimization] Route start: ${origin.name} (${origin.lat}, ${origin.lng})`);
+    console.log(`[RouteFromOptimization] Route end: ${destination.name} (${destination.lat}, ${destination.lng})`);
 
-    // Gán các điểm dừng vào tuyến (theo thứ tự ngược lại)
-    const stops = [];
-    
-    // Thêm depot như điểm dừng đầu tiên
-    let depotStopId = await this.findOrCreateDepotStop(depot);
-    
-    await RouteStopModel.addStop(routeId, depotStopId, 1, 0);
-
-    // Thêm các điểm dừng theo thứ tự ngược lại
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      
-      const stop = await DiemDungModel.getById(node.maDiem);
-      if (!stop) {
-        console.warn(`[RouteFromOptimization] ⚠️ Stop ${node.maDiem} not found, skipping`);
-        continue;
+    // Helper function để thêm hoặc cập nhật điểm dừng
+    const addOrUpdateStop = async (stopId, seq, dwellSeconds) => {
+      try {
+        await RouteStopModel.addStop(routeId, stopId, seq, dwellSeconds);
+      } catch (error) {
+        if (error.message === "STOP_ALREADY_IN_ROUTE" || error.message === "SEQUENCE_ALREADY_EXISTS") {
+          // Nếu đã tồn tại, cập nhật sequence và dwell_seconds
+          console.log(`[RouteFromOptimization] Stop ${stopId} already in route, updating sequence to ${seq}`);
+          await RouteStopModel.updateStop(routeId, stopId, seq, dwellSeconds);
+        } else {
+          throw error;
+        }
       }
+    };
 
-      await RouteStopModel.addStop(routeId, node.maDiem, i + 2, 30);
-
+    // Gán các điểm dừng vào tuyến theo thứ tự đã được optimize: trường SGU → các điểm khác → điểm xa nhất
+    const stops = [];
+    let sequence = 1;
+    
+    // Loại bỏ trùng lặp trong optimizedRemainingNodes
+    const uniqueOptimizedRemainingNodes = [];
+    const seenStopIds = new Set();
+    for (const node of optimizedRemainingNodes) {
+      const nodeRealId = this.getRealStopId(node);
+      if (!seenStopIds.has(nodeRealId)) {
+        seenStopIds.add(nodeRealId);
+        uniqueOptimizedRemainingNodes.push(node);
+      }
+    }
+    
+    // Kiểm tra xem depot stop có trùng với farthest stop không
+    const isDepotSameAsFarthest = farthestStopRealId === depotStopId;
+    
+    // 1. Điểm dừng đầu tiên: trường SGU (không đón học sinh, dwell_seconds = 0)
+    if (!isDepotSameAsFarthest) {
+      await addOrUpdateStop(depotStopId, sequence, 0);
       stops.push({
-        maDiem: node.maDiem,
-        tenDiem: node.tenDiem,
-        viDo: node.viDo,
-        kinhDo: node.kinhDo,
-        sequence: i + 2,
+        maDiem: depotStopId,
+        tenDiem: origin.name || "Đại học Sài Gòn",
+        viDo: origin.lat,
+        kinhDo: origin.lng,
+        sequence: sequence++,
       });
     }
 
-    console.log(`[RouteFromOptimization] ✅ Assigned ${stops.length + 1} stops to return route ${routeId}`);
+    // 2. Các điểm dừng còn lại (theo thứ tự đã được optimize, đã loại bỏ trùng lặp)
+    for (const node of uniqueOptimizedRemainingNodes) {
+      const nodeRealId = this.getRealStopId(node);
+      // Bỏ qua nếu trùng với depot hoặc farthest stop
+      if (nodeRealId === depotStopId || nodeRealId === farthestStopRealId) {
+        continue;
+      }
+      
+      const stop = await DiemDungModel.getById(nodeRealId);
+      if (!stop) {
+        console.warn(`[RouteFromOptimization] ⚠️ Stop ${nodeRealId} not found, skipping`);
+        continue;
+      }
+
+      await addOrUpdateStop(nodeRealId, sequence, 30);
+      stops.push({
+        maDiem: nodeRealId,
+        tenDiem: node.tenDiem || stop.tenDiem,
+        viDo: node.viDo,
+        kinhDo: node.kinhDo,
+        sequence: sequence++,
+      });
+    }
+
+    // 3. Điểm dừng cuối cùng: điểm xa nhất (điểm kết thúc)
+    // Chỉ thêm nếu không trùng với depot
+    if (!isDepotSameAsFarthest) {
+      const farthestStopData = await DiemDungModel.getById(farthestStopRealId);
+      if (farthestStopData) {
+        await addOrUpdateStop(farthestStopRealId, sequence, 30);
+        stops.push({
+          maDiem: farthestStopRealId,
+          tenDiem: farthestStop.tenDiem || farthestStopData.tenDiem,
+          viDo: farthestStop.viDo,
+          kinhDo: farthestStop.kinhDo,
+          sequence: sequence,
+        });
+      }
+    } else {
+      // Nếu depot là farthest stop, đảm bảo nó ở cuối với dwell_seconds = 30 (đón học sinh)
+      await addOrUpdateStop(depotStopId, sequence, 30);
+      // Cập nhật sequence của depot stop nếu đã có
+      const existingDepotIndex = stops.findIndex(s => s.maDiem === depotStopId);
+      if (existingDepotIndex >= 0) {
+        stops[existingDepotIndex].sequence = sequence;
+      } else {
+        stops.push({
+          maDiem: depotStopId,
+          tenDiem: farthestStop.tenDiem || destination.name || "Đại học Sài Gòn",
+          viDo: destination.lat,
+          kinhDo: destination.lng,
+          sequence: sequence,
+        });
+      }
+    }
+
+    console.log(`[RouteFromOptimization] ✅ Assigned ${stops.length} stops to return route ${routeId} (school → other stops → farthest stop)`);
+
+    // 🔥 Tự động gán học sinh vào student_stop_suggestions sau khi thêm stops (giống như tạo thủ công)
+    try {
+      const RouteService = (await import("./RouteService.js")).default;
+      const routeStops = await RouteStopModel.getByRouteId(routeId);
+      if (routeStops.length > 0) {
+        const assignedCount = await RouteService.assignStudentsToStops(routeId, routeStops);
+        console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to return route ${routeId} stops`);
+      }
+    } catch (assignError) {
+      console.warn(`[RouteFromOptimization] ⚠️ Failed to auto-assign students to return route ${routeId}:`, assignError);
+      // Không throw error - route đã được tạo thành công
+    }
 
     return {
       maTuyen: routeId,
       tenTuyen,
-      diemBatDau: origin.name || "Đại học Sài Gòn",
-      diemKetThuc: destination.tenDiem || `Điểm dừng ${destination.maDiem}`,
+      diemBatDau: origin.name || "Đại học Sài Gòn", // Trường SGU
+      diemKetThuc: destination.name, // Điểm xa nhất
       thoiGianUocTinh: estimatedTime,
-      stopCount: stops.length + 1,
+      stopCount: stops.length,
       totalDemand: vrpRoute.totalDemand || 0,
       stops,
+    };
+  }
+
+  /**
+   * Tạo tên tuyến unique (tránh duplicate)
+   * Nếu tên đã tồn tại, thêm số thứ tự vào cuối
+   * @param {string} baseName - Tên tuyến cơ bản
+   * @param {Set<string>} createdRouteNames - Set các tên tuyến đã tạo trong session này (optional)
+   */
+  static async generateUniqueRouteName(baseName, createdRouteNames = null) {
+    let uniqueName = baseName;
+    let counter = 1;
+    const maxAttempts = 100; // Prevent infinite loop
+    let attempts = 0;
+    
+    // Log để debug
+    console.log(`[RouteFromOptimization] Generating unique name for: "${baseName}"`);
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      // Kiểm tra trong session hiện tại trước (nếu có)
+      if (createdRouteNames && createdRouteNames.has(uniqueName)) {
+        console.log(`[RouteFromOptimization] Name "${uniqueName}" already used in this session, generating new name...`);
+      } else {
+        // Kiểm tra trong database
+        const existing = await TuyenDuongModel.getByName(uniqueName);
+        if (!existing) {
+          // Tên chưa tồn tại, có thể dùng
+          if (counter > 1) {
+            console.log(`[RouteFromOptimization] ⚠️ Generated unique route name: ${uniqueName} (original: ${baseName}) - Name was already taken`);
+          } else {
+            console.log(`[RouteFromOptimization] ✅ Using original name: ${uniqueName}`);
+          }
+          return uniqueName;
+        } else {
+          console.log(`[RouteFromOptimization] Name "${uniqueName}" already exists in database (ID: ${existing.maTuyen}), generating new name...`);
+        }
+      }
+      
+      // Tên đã tồn tại, thêm số thứ tự
+      counter++;
+      
+      // Xử lý các format khác nhau
+      if (baseName.endsWith(')')) {
+        // Format: "Tuyến Tối Ưu 1 (Về)" -> "Tuyến Tối Ưu 1 (Về 2)"
+        const match = baseName.match(/^(.+?)\s*\(([^)]+)\)$/);
+        if (match) {
+          uniqueName = `${match[1]} (${match[2]} ${counter})`;
+        } else {
+          uniqueName = `${baseName} ${counter}`;
+        }
+      } else if (baseName.includes(' - Đi')) {
+        // Format: "Tuyến Tối Ưu 1 - Đi" -> "Tuyến Tối Ưu 1 - Đi 2"
+        uniqueName = `${baseName} ${counter}`;
+      } else {
+        // Format khác: thêm số vào cuối
+        uniqueName = `${baseName} ${counter}`;
+      }
+    }
+    
+    // Fallback: nếu vẫn không tìm được tên unique sau maxAttempts lần
+    console.error(`[RouteFromOptimization] ⚠️ Could not generate unique name after ${maxAttempts} attempts, using: ${uniqueName}`);
+    return uniqueName;
+  }
+
+  /**
+   * Tìm các tuyến cũ từ optimization với cùng prefix
+   * @param {string} routeNamePrefix - Prefix của tên tuyến (ví dụ: "Tuyến Tối Ưu")
+   * @returns {Promise<Array>} Danh sách tuyến cũ với thông tin schedule count
+   */
+  static async findOldOptimizationRoutes(routeNamePrefix) {
+    const query = `
+      SELECT 
+        td.maTuyen,
+        td.tenTuyen,
+        td.ngayTao,
+        td.routeType,
+        td.pairedRouteId,
+        COUNT(DISTINCT lt.maLichTrinh) as scheduleCount
+      FROM TuyenDuong td
+      LEFT JOIN LichTrinh lt ON td.maTuyen = lt.maTuyen
+      WHERE td.tenTuyen LIKE ?
+        AND td.trangThai = TRUE
+      GROUP BY td.maTuyen
+      ORDER BY td.ngayTao DESC
+    `;
+    
+    const [routes] = await pool.query(query, [`${routeNamePrefix}%`]);
+    
+    // Convert MySQL TINYINT to boolean and format dates
+    return routes.map(route => ({
+      maTuyen: route.maTuyen,
+      tenTuyen: route.tenTuyen,
+      ngayTao: route.ngayTao ? new Date(route.ngayTao).toISOString() : null,
+      routeType: route.routeType,
+      pairedRouteId: route.pairedRouteId,
+      scheduleCount: parseInt(route.scheduleCount) || 0,
+    }));
+  }
+
+  /**
+   * Phân loại tuyến cũ thành có thể xóa và không thể xóa
+   * @param {Array} oldRoutes - Danh sách tuyến cũ từ findOldOptimizationRoutes
+   * @returns {Object} { canDelete: [], cannotDelete: [] }
+   */
+  static categorizeOldRoutes(oldRoutes) {
+    const canDelete = [];
+    const cannotDelete = [];
+    const processedRouteIds = new Set(); // Track processed routes to avoid duplicates
+    
+    for (const route of oldRoutes) {
+      // Skip if already processed (could be paired route)
+      if (processedRouteIds.has(route.maTuyen)) {
+        continue;
+      }
+      
+      // Mark as processed
+      processedRouteIds.add(route.maTuyen);
+      
+      // Check if route has schedules
+      if (route.scheduleCount > 0) {
+        cannotDelete.push(route);
+      } else {
+        canDelete.push(route);
+        
+        // If route has paired route, also add it to canDelete (if not already processed)
+        if (route.pairedRouteId && !processedRouteIds.has(route.pairedRouteId)) {
+          const pairedRoute = oldRoutes.find(r => r.maTuyen === route.pairedRouteId);
+          if (pairedRoute && pairedRoute.scheduleCount === 0) {
+            canDelete.push(pairedRoute);
+            processedRouteIds.add(pairedRoute.maTuyen);
+          }
+        }
+      }
+    }
+    
+    return { canDelete, cannotDelete };
+  }
+
+  /**
+   * Tìm và phân loại tuyến cũ, có thể tự động xóa nếu được yêu cầu
+   * @param {string} routeNamePrefix - Prefix của tên tuyến
+   * @param {Object} options - { autoDelete: boolean }
+   * @returns {Promise<Object>} { canDelete: [], cannotDelete: [], action: 'show_dialog' | 'deleted' | 'none' }
+   */
+  static async findAndCleanOldRoutes(routeNamePrefix, options = {}) {
+    const { autoDelete = false } = options;
+    
+    // Tìm tuyến cũ
+    const oldRoutes = await this.findOldOptimizationRoutes(routeNamePrefix);
+    
+    if (oldRoutes.length === 0) {
+      console.log(`[RouteFromOptimization] No old routes found with prefix "${routeNamePrefix}"`);
+      return { canDelete: [], cannotDelete: [], action: 'none' };
+    }
+    
+    console.log(`[RouteFromOptimization] Found ${oldRoutes.length} old routes with prefix "${routeNamePrefix}"`);
+    
+    // Phân loại
+    const categorized = this.categorizeOldRoutes(oldRoutes);
+    
+    console.log(`[RouteFromOptimization] Categorized: ${categorized.canDelete.length} can delete, ${categorized.cannotDelete.length} cannot delete`);
+    
+    // Nếu autoDelete và có tuyến có thể xóa
+    if (autoDelete && categorized.canDelete.length > 0) {
+      // Xóa các tuyến không có schedule
+      let deletedCount = 0;
+      for (const route of categorized.canDelete) {
+        try {
+          // Xóa tuyến về trước (nếu có), sau đó xóa tuyến đi (tránh foreign key constraint)
+          if (route.routeType === 've') {
+            await TuyenDuongModel.hardDelete(route.maTuyen);
+            deletedCount++;
+            console.log(`[RouteFromOptimization] Deleted return route: ${route.tenTuyen} (ID: ${route.maTuyen})`);
+          }
+        } catch (error) {
+          console.error(`[RouteFromOptimization] Error deleting route ${route.maTuyen}:`, error);
+        }
+      }
+      
+      // Xóa tuyến đi sau
+      for (const route of categorized.canDelete) {
+        try {
+          if (route.routeType === 'di' || !route.routeType) {
+            await TuyenDuongModel.hardDelete(route.maTuyen);
+            deletedCount++;
+            console.log(`[RouteFromOptimization] Deleted route: ${route.tenTuyen} (ID: ${route.maTuyen})`);
+          }
+        } catch (error) {
+          console.error(`[RouteFromOptimization] Error deleting route ${route.maTuyen}:`, error);
+        }
+      }
+      
+      return {
+        canDelete: categorized.canDelete,
+        cannotDelete: categorized.cannotDelete,
+        action: 'deleted',
+        deletedCount,
+      };
+    }
+    
+    // Trả về thông tin để hiển thị dialog
+    return {
+      canDelete: categorized.canDelete,
+      cannotDelete: categorized.cannotDelete,
+      action: 'show_dialog',
     };
   }
 

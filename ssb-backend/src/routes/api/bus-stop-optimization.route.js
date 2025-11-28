@@ -88,5 +88,13 @@ router.post(
   BusStopOptimizationController.createSchedules
 );
 
+// DELETE /api/v1/bus-stops/old-routes - Xóa các tuyến cũ từ optimization
+router.delete(
+  "/old-routes",
+  AuthMiddleware.authenticate,
+  AuthMiddleware.authorize("quan_tri"),
+  BusStopOptimizationController.deleteOldRoutes
+);
+
 export default router;
 
