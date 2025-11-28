@@ -190,13 +190,32 @@ class RouteAutoCreateService {
           }
         }
 
-        // Lưu suggestions
-        if (stop.students && stop.students.length > 0) {
-          const stopSuggestions = stop.students.map((student) => ({
-            maTuyen: routeId,
-            maDiemDung: stop.maDiem,
-            maHocSinh: student.maHocSinh,
-          }));
+        // 🔥 BỎ QUA điểm dừng là trường Đại học Sài Gòn (không đón học sinh tại trường)
+        // Kiểm tra xem điểm dừng có phải là trường học không
+        const isSchoolStop = this.isSchoolStop(stop, sortedStops);
+        
+        // Lưu suggestions với khoảng cách (chỉ cho các điểm dừng không phải trường học)
+        if (!isSchoolStop && stop.students && stop.students.length > 0) {
+          // Tính khoảng cách từ học sinh đến điểm dừng
+          const stopSuggestions = stop.students.map((student) => {
+            let khoangCachMet = null;
+            if (student.viDo && student.kinhDo && stop.viDo && stop.kinhDo) {
+              // Tính khoảng cách (km) và chuyển sang mét
+              const distanceKm = GeoUtils.distanceBetweenPoints(
+                student.viDo,
+                student.kinhDo,
+                stop.viDo,
+                stop.kinhDo
+              );
+              khoangCachMet = Math.round(distanceKm * 1000); // Chuyển sang mét
+            }
+            return {
+              maTuyen: routeId,
+              maDiemDung: stop.maDiem,
+              maHocSinh: student.maHocSinh,
+              khoangCachMet: khoangCachMet,
+            };
+          });
 
           await StudentStopSuggestionModel.bulkCreate(stopSuggestions);
           
@@ -211,6 +230,8 @@ class RouteAutoCreateService {
             })),
             studentCount: stop.students.length,
           });
+        } else if (isSchoolStop) {
+          console.log(`[RouteAutoCreate] Skipping school stop ${stop.maDiem} (${stop.tenDiem}) - không đón học sinh tại trường`);
         }
       }
 
@@ -550,6 +571,55 @@ class RouteAutoCreateService {
     }
 
     return null;
+  }
+
+  /**
+   * Kiểm tra xem một điểm dừng có phải là trường Đại học Sài Gòn không
+   * @param {Object} stop - Điểm dừng {maDiem, tenDiem, viDo, kinhDo, sequence}
+   * @param {Array} routeStops - Toàn bộ danh sách stops của route (để kiểm tra sequence cuối)
+   * @returns {boolean} True nếu là trường học
+   */
+  static isSchoolStop(stop, routeStops = []) {
+    if (!stop) return false;
+    
+    // Tọa độ trường Đại học Sài Gòn (cho phép sai số 0.001 độ ~ 100m)
+    const SCHOOL_LAT = 10.760064662799088;
+    const SCHOOL_LNG = 106.6822422067464;
+    const TOLERANCE = 0.001; // ~100m
+    
+    // Kiểm tra theo tọa độ
+    if (stop.viDo && stop.kinhDo) {
+      const latDiff = Math.abs(parseFloat(stop.viDo) - SCHOOL_LAT);
+      const lngDiff = Math.abs(parseFloat(stop.kinhDo) - SCHOOL_LNG);
+      
+      if (latDiff <= TOLERANCE && lngDiff <= TOLERANCE) {
+        return true;
+      }
+    }
+    
+    // Kiểm tra theo tên điểm dừng
+    const stopName = (stop.tenDiem || '').toLowerCase();
+    const schoolKeywords = ['đại học sài gòn', 'sgu', 'trường đại học sài gòn', 'university'];
+    if (schoolKeywords.some(keyword => stopName.includes(keyword))) {
+      return true;
+    }
+    
+    // Kiểm tra nếu là điểm cuối cùng của route (sequence lớn nhất)
+    if (routeStops.length > 0 && stop.sequence !== undefined) {
+      const maxSequence = Math.max(...routeStops.map(s => s.sequence || 0));
+      if (stop.sequence === maxSequence) {
+        // Nếu là điểm cuối và tọa độ gần trường, coi là trường học
+        if (stop.viDo && stop.kinhDo) {
+          const latDiff = Math.abs(parseFloat(stop.viDo) - SCHOOL_LAT);
+          const lngDiff = Math.abs(parseFloat(stop.kinhDo) - SCHOOL_LNG);
+          if (latDiff <= TOLERANCE * 2 && lngDiff <= TOLERANCE * 2) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
   }
 
   /**

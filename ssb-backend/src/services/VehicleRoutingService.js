@@ -53,10 +53,12 @@ class VehicleRoutingService {
   }
 
   /**
-   * Lấy điểm dừng với demand (số học sinh)
+   * Lấy điểm dừng với demand (số học sinh) từ student_stop_suggestions
    * @returns {Promise<Array>} [{maDiem, tenDiem, viDo, kinhDo, demand}]
    */
   static async getStopsWithDemand() {
+    // Tính demand từ student_stop_suggestions (tổng hợp từ tất cả routes)
+    // Mỗi học sinh chỉ tính 1 lần cho mỗi điểm dừng (dù có thể có trong nhiều routes)
     const [rows] = await pool.query(
       `SELECT 
         dd.maDiem,
@@ -64,17 +66,17 @@ class VehicleRoutingService {
         dd.viDo,
         dd.kinhDo,
         dd.address,
-        COUNT(hsd.maHocSinh) as demand
+        COUNT(DISTINCT sss.maHocSinh) as demand
        FROM DiemDung dd
-       LEFT JOIN HocSinh_DiemDung hsd ON dd.maDiem = hsd.maDiemDung
+       LEFT JOIN student_stop_suggestions sss ON dd.maDiem = sss.maDiemDung
        GROUP BY dd.maDiem, dd.tenDiem, dd.viDo, dd.kinhDo, dd.address
        HAVING demand > 0
        ORDER BY demand DESC`
     );
     
-    console.log(`[VehicleRouting] Found ${rows.length} stops with students assigned`);
+    console.log(`[VehicleRouting] Found ${rows.length} stops with students assigned (from student_stop_suggestions)`);
     if (rows.length === 0) {
-      console.warn(`[VehicleRouting] ⚠️ No stops with demand found. Make sure Tier 1 optimization has been run first.`);
+      console.warn(`[VehicleRouting] ⚠️ No stops with demand found. Make sure routes have been created with student_stop_suggestions.`);
     }
     
     return rows;

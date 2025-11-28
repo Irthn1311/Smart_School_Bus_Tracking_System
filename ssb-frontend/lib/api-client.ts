@@ -367,6 +367,13 @@ class ApiClient {
     });
   }
 
+  async getRouteStopSuggestions(routeId: string | number) {
+    return this.request({
+      method: "get",
+      url: `/routes/${routeId}/stop-suggestions`,
+    });
+  }
+
   async addStopToRoute(
     routeId: string | number,
     data: {

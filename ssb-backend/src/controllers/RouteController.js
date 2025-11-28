@@ -106,6 +106,7 @@ class RouteController {
         trangThai,
         routeType, // 'di' hoặc 've'
         createReturnRoute, // Có tạo tuyến về không (mặc định true)
+        skipAutoAssign, // 🔥 Bỏ qua tự động gán học sinh khi frontend sẽ gán thủ công
         stops, // Danh sách stops nếu có
       } = req.body;
 
@@ -145,6 +146,7 @@ class RouteController {
         trangThai: trangThai !== undefined ? trangThai : true,
         routeType: routeType || 'di', // Mặc định là tuyến đi
         createReturnRoute: createReturnRoute !== false, // Mặc định true
+        skipAutoAssign: skipAutoAssign !== undefined ? skipAutoAssign : false, // 🔥 Truyền flag skipAutoAssign để backend không tự động gán học sinh
         stops: stops || [], // Danh sách stops nếu có
       };
 
@@ -1115,19 +1117,27 @@ class RouteController {
         // Lấy TẤT CẢ suggestions cho stop này (không filter khoảng cách)
         const stopSuggestions = allSuggestions.filter((s) => s.maDiemDung === stop.maDiem);
         
-        // Loại bỏ duplicate: chỉ lấy học sinh chưa được gán vào điểm dừng trước đó
-        const uniqueStudents = stopSuggestions
+        // 🔥 FIX: Loại bỏ duplicate - cải thiện logic deduplication
+        // Bước 1: Loại bỏ duplicate trong cùng một stop trước (nếu có duplicate records trong DB)
+        const uniqueInStop = [];
+        const seenInStop = new Set();
+        for (const s of stopSuggestions) {
+          const key = `${s.maTuyen}_${s.maDiemDung}_${s.maHocSinh}`;
+          if (!seenInStop.has(key)) {
+            seenInStop.add(key);
+            uniqueInStop.push(s);
+          }
+        }
+        
+        // Bước 2: Loại bỏ học sinh đã được gán vào điểm dừng trước đó (sequence nhỏ hơn)
+        const uniqueStudents = uniqueInStop
           .filter((s) => {
             if (assignedStudentIds.has(s.maHocSinh)) {
+              console.log(`[RouteController.getStopSuggestions] ⚠️ Duplicate detected: Student ${s.maHocSinh} (${s.tenHocSinh}) already assigned to a previous stop`);
               return false; // Học sinh đã được gán vào điểm dừng trước đó
             }
             assignedStudentIds.add(s.maHocSinh);
             return true;
-          })
-          // Loại bỏ duplicate trong cùng một stop (nếu có)
-          .filter((s, index, arr) => {
-            const firstIndex = arr.findIndex((item) => item.maHocSinh === s.maHocSinh);
-            return firstIndex === index;
           })
           .map((s) => ({
             maHocSinh: s.maHocSinh,
@@ -1135,6 +1145,7 @@ class RouteController {
             lop: s.lop,
             viDo: s.studentLat,
             kinhDo: s.studentLng,
+            khoangCachMet: s.khoangCachMet || null,
           }));
 
         return {
@@ -1304,6 +1315,26 @@ class RouteController {
         return response.notFound(res, "Không tìm thấy học sinh");
       }
 
+      // Lấy thông tin điểm dừng để tính khoảng cách
+      const DiemDungModel = (await import("../models/DiemDungModel.js")).default;
+      const stop = await DiemDungModel.getById(parseInt(stopId));
+      if (!stop) {
+        return response.notFound(res, "Không tìm thấy điểm dừng");
+      }
+
+      // Tính khoảng cách từ học sinh đến điểm dừng (nếu có tọa độ)
+      let khoangCachMet = null;
+      if (student.viDo && student.kinhDo && stop.viDo && stop.kinhDo) {
+        const GeoUtils = (await import("../utils/GeoUtils.js")).default;
+        const distanceKm = GeoUtils.distanceBetweenPoints(
+          student.viDo,
+          student.kinhDo,
+          stop.viDo,
+          stop.kinhDo
+        );
+        khoangCachMet = Math.round(distanceKm * 1000); // Chuyển sang mét
+      }
+
       // Thêm vào student_stop_suggestions
       const StudentStopSuggestionModel = (await import("../models/StudentStopSuggestionModel.js")).default;
       await StudentStopSuggestionModel.bulkCreate([
@@ -1311,6 +1342,7 @@ class RouteController {
           maTuyen: parseInt(id),
           maDiemDung: parseInt(stopId),
           maHocSinh: parseInt(student_id),
+          khoangCachMet: khoangCachMet,
         },
       ]);
 
@@ -1398,12 +1430,51 @@ class RouteController {
         ]);
       }
 
-      // Tạo suggestions
-      const suggestions = student_ids.map((studentId) => ({
-        maTuyen: parseInt(id),
-        maDiemDung: parseInt(stop_id),
-        maHocSinh: parseInt(studentId),
-      }));
+      // Lấy thông tin điểm dừng để tính khoảng cách
+      const DiemDungModel = (await import("../models/DiemDungModel.js")).default;
+      const stop = await DiemDungModel.getById(parseInt(stop_id));
+      if (!stop) {
+        return response.notFound(res, "Không tìm thấy điểm dừng");
+      }
+
+      // 🔥 KIỂM TRA: Không cho phép thêm học sinh vào điểm dừng là trường Đại học Sài Gòn
+      const RouteService = (await import("../services/RouteService.js")).default;
+      const isSchoolStop = RouteService.isSchoolStop(stop, routeStops);
+      if (isSchoolStop) {
+        return response.validationError(res, "Không thể thêm học sinh vào điểm dừng là trường học", [
+          { field: "stop_id", message: "Điểm dừng này là trường Đại học Sài Gòn - không đón học sinh tại trường" },
+        ]);
+      }
+
+      // Lấy thông tin học sinh và tính khoảng cách
+      const GeoUtils = (await import("../utils/GeoUtils.js")).default;
+      const suggestions = [];
+      for (const studentId of student_ids) {
+        const student = await HocSinhModel.getById(parseInt(studentId));
+        if (!student) {
+          console.warn(`[RouteController] Student ${studentId} not found, skipping`);
+          continue;
+        }
+
+        // Tính khoảng cách từ học sinh đến điểm dừng (nếu có tọa độ)
+        let khoangCachMet = null;
+        if (student.viDo && student.kinhDo && stop.viDo && stop.kinhDo) {
+          const distanceKm = GeoUtils.distanceBetweenPoints(
+            student.viDo,
+            student.kinhDo,
+            stop.viDo,
+            stop.kinhDo
+          );
+          khoangCachMet = Math.round(distanceKm * 1000); // Chuyển sang mét
+        }
+
+        suggestions.push({
+          maTuyen: parseInt(id),
+          maDiemDung: parseInt(stop_id),
+          maHocSinh: parseInt(studentId),
+          khoangCachMet: khoangCachMet,
+        });
+      }
 
       // Lưu vào database
       const StudentStopSuggestionModel = (await import("../models/StudentStopSuggestionModel.js")).default;

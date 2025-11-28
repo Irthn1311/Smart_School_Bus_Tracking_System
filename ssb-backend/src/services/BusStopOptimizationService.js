@@ -15,7 +15,7 @@ import StopSuggestionService from "./StopSuggestionService.js";
  *    - Gán tối đa S_max học sinh gần nhất từ Cov(c*) vào điểm dừng mới
  *    - Xóa các học sinh đã gán khỏi U
  * 3. Snap điểm dừng lên đường bằng Roads API
- * 4. Lưu vào DB: DiemDung và HocSinh_DiemDung
+ * 4. Lưu vào DB: DiemDung (assignments được return trong response, không lưu vào HocSinh_DiemDung)
  */
 class BusStopOptimizationService {
 
@@ -489,7 +489,7 @@ class BusStopOptimizationService {
       C.splice(C.indexOf(bestCandidate), 1);
     }
 
-    // Lưu assignments vào DB
+    // Tạo assignments array (không lưu vào DB nữa - đã chuyển sang student_stop_suggestions)
     const assignments = [];
     for (const [maHocSinh, assignment] of ASSIGN.entries()) {
       assignments.push({
@@ -499,10 +499,8 @@ class BusStopOptimizationService {
       });
     }
 
-    // Bulk insert vào HocSinh_DiemDung
-    if (assignments.length > 0) {
-      await this.saveAssignments(assignments);
-    }
+    // NOTE: Không lưu vào HocSinh_DiemDung nữa - assignments chỉ được return trong response
+    // Để lưu vào DB, cần tạo route và sử dụng student_stop_suggestions
 
     const stats = {
       totalStudents: allStudents.length,
@@ -522,74 +520,50 @@ class BusStopOptimizationService {
   }
 
   /**
-   * Lưu assignments vào bảng HocSinh_DiemDung
-   * @param {Array} assignments - [{maHocSinh, maDiemDung, khoangCachMet}]
+   * @deprecated Không còn lưu vào HocSinh_DiemDung - đã chuyển sang student_stop_suggestions
+   * Assignments chỉ được return trong response của greedyMaximumCoverage()
    */
   static async saveAssignments(assignments) {
-    if (assignments.length === 0) return;
-
-    // Xóa assignments cũ (nếu có)
-    const studentIds = assignments.map((a) => a.maHocSinh);
-    await pool.query(
-      `DELETE FROM HocSinh_DiemDung WHERE maHocSinh IN (${studentIds.map(() => "?").join(",")})`,
-      studentIds
-    );
-
-    // Insert assignments mới
-    const values = assignments.map((a) => [a.maHocSinh, a.maDiemDung, a.khoangCachMet || 0]);
-    const placeholders = values.map(() => "(?, ?, ?)").join(",");
-    const flatValues = values.flat();
-
-    await pool.query(
-      `INSERT INTO HocSinh_DiemDung (maHocSinh, maDiemDung, khoangCachMet) VALUES ${placeholders}`,
-      flatValues
-    );
-
-    console.log(`[BusStopOptimization] Saved ${assignments.length} assignments to HocSinh_DiemDung`);
+    console.warn(`[BusStopOptimization] saveAssignments() is deprecated - assignments are returned in response, not saved to HocSinh_DiemDung`);
+    // Không làm gì - assignments đã được return trong greedyMaximumCoverage()
   }
 
   /**
-   * Lấy assignments hiện tại từ DB
-   * @returns {Promise<Array>} [{maHocSinh, maDiemDung, khoangCachMet}]
+   * @deprecated Không còn dùng HocSinh_DiemDung - trả về empty array
+   * Để lấy assignments, sử dụng student_stop_suggestions thông qua route
+   * @returns {Promise<Array>} Empty array
    */
   static async getAssignments() {
-    const [rows] = await pool.query(
-      `SELECT hsd.*, hs.hoTen, hs.viDo as studentLat, hs.kinhDo as studentLng,
-              dd.tenDiem, dd.viDo as stopLat, dd.kinhDo as stopLng
-       FROM HocSinh_DiemDung hsd
-       JOIN HocSinh hs ON hsd.maHocSinh = hs.maHocSinh
-       JOIN DiemDung dd ON hsd.maDiemDung = dd.maDiem
-       ORDER BY hsd.maDiemDung, hsd.khoangCachMet`
-    );
-    return rows;
+    console.warn(`[BusStopOptimization] getAssignments() is deprecated - HocSinh_DiemDung table has been removed`);
+    return [];
   }
 
   /**
-   * Lấy thống kê về điểm dừng và assignments
-   * @returns {Promise<Object>} Stats
+   * @deprecated Không còn dùng HocSinh_DiemDung - trả về stats từ DiemDung
+   * @returns {Promise<Object>} Stats chỉ từ DiemDung (không có assignments)
    */
   static async getStats() {
     const [stopStats] = await pool.query(
       `SELECT 
         COUNT(DISTINCT dd.maDiem) as totalStops,
-        COUNT(DISTINCT hsd.maHocSinh) as totalAssignedStudents,
-        AVG(hsd.khoangCachMet) as avgWalkDistance,
-        MAX(hsd.khoangCachMet) as maxWalkDistance,
-        COUNT(*) as totalAssignments
-       FROM DiemDung dd
-       LEFT JOIN HocSinh_DiemDung hsd ON dd.maDiem = hsd.maDiemDung`
+        0 as totalAssignedStudents,
+        0 as avgWalkDistance,
+        0 as maxWalkDistance,
+        0 as totalAssignments
+       FROM DiemDung dd`
     );
 
     const [stopStudentCounts] = await pool.query(
       `SELECT 
         dd.maDiem,
         dd.tenDiem,
-        COUNT(hsd.maHocSinh) as studentCount
+        0 as studentCount
        FROM DiemDung dd
-       LEFT JOIN HocSinh_DiemDung hsd ON dd.maDiem = hsd.maDiemDung
        GROUP BY dd.maDiem, dd.tenDiem
-       ORDER BY studentCount DESC`
+       ORDER BY dd.tenDiem`
     );
+
+    console.warn(`[BusStopOptimization] getStats() is deprecated - HocSinh_DiemDung table has been removed, returning empty stats`);
 
     return {
       ...stopStats[0],

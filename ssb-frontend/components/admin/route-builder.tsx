@@ -211,7 +211,23 @@ export function RouteBuilder({
   
   // State để lưu học sinh đã chọn cho mỗi điểm dừng (khi chưa có route ID)
   // Key: stop ID (pending stop ID hoặc confirmed stop ID), Value: array of student IDs
-  const [selectedStudentsByStop, setSelectedStudentsByStop] = useState<Map<string, number[]>>(new Map());
+  const [selectedStudentsByStop, setSelectedStudentsByStop] = useState<Map<string, number[]>>(() => {
+    // 🔥 Load từ localStorage nếu có (chỉ trong create mode)
+    if (typeof window !== 'undefined' && mode === 'create') {
+      try {
+        const saved = localStorage.getItem('route_builder_selected_students');
+        if (saved) {
+          const data = JSON.parse(saved);
+          const map = new Map(data);
+          console.log(`📦 Loaded ${map.size} stops with selected students from localStorage`);
+          return map;
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to load saved students from localStorage:', err);
+      }
+    }
+    return new Map();
+  });
   
   // State cho việc hiển thị TẤT CẢ học sinh trên bản đồ
   const [showAllStudents, setShowAllStudents] = useState(false);
@@ -3834,17 +3850,23 @@ export function RouteBuilder({
       return;
     }
     
-    // Tạo confirmed stop
+    // 🔥 FIX: Giữ nguyên ID của pending stop để selectedStudentsByStop vẫn hoạt động
     const confirmedStop: Stop = {
       ...pendingStop,
-      id: Date.now().toString(),
+      id: pendingStop.id, // Giữ nguyên ID thay vì tạo mới
       sequence: stops.length + 1,
       name: pendingStop.name.trim(),
     };
     
+    // 🔥 FIX: Map lại selectedStudentsByStop nếu ID thay đổi (fallback - không cần nữa vì giữ nguyên ID)
+    // Nhưng vẫn đảm bảo selectedStudentsByStop có key đúng
     const updatedStops = [...stops, confirmedStop];
     setStops(updatedStops);
     setSelectedStopId(confirmedStop.id);
+    
+    // Log để debug
+    console.log(`✅ Confirmed stop: ${confirmedStop.id} (${confirmedStop.name})`);
+    console.log(`   Selected students count: ${selectedStudentsByStop.get(confirmedStop.id)?.length || 0}`);
     
     // Clear pending state
     setPendingStop(null);
@@ -4221,6 +4243,366 @@ export function RouteBuilder({
     }, 100);
   };
 
+  // 🔥 HÀM RIÊNG: Xử lý gán học sinh THỦ CÔNG
+  const handleManualStudentAssignment = async (routeId: number, routeStops: any[]) => {
+    console.log(`📝 [MANUAL MODE] Bắt đầu xử lý gán học sinh thủ công cho route ${routeId}`);
+    
+    if (selectedStudentsByStop.size === 0) {
+      console.log(`📝 [MANUAL MODE] Không có học sinh được chọn thủ công, bỏ qua`);
+      return;
+    }
+
+    const assignedStudentIds = new Set<number>();
+    
+    // BƯỚC 1: Xóa tất cả học sinh đã được gán tự động từ backend (nếu có)
+    console.log(`🧹 [MANUAL MODE] BƯỚC 1: Xóa học sinh tự động (có ${selectedStudentsByStop.size} điểm dừng có học sinh được chọn thủ công)`);
+    
+    const allAssignedStudents = new Set<number>();
+    const stopsWithStudents: any[] = [];
+    
+    // Lấy học sinh từ tuyến đi
+    try {
+      const suggestionsResponse = await apiClient.getRouteStopSuggestions(routeId);
+      if (suggestionsResponse.success && suggestionsResponse.data) {
+        const stops = (suggestionsResponse.data as any).stops || [];
+        stopsWithStudents.push(...stops);
+        stops.forEach((stop: any) => {
+          if (stop.students && Array.isArray(stop.students)) {
+            stop.students.forEach((s: any) => {
+              allAssignedStudents.add(s.maHocSinh || s.id);
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('⚠️ [MANUAL MODE] Không thể lấy học sinh từ tuyến đi:', err);
+    }
+    
+    // Lấy học sinh từ tuyến về (nếu có)
+    try {
+      const routeDetail = await apiClient.getRouteById(routeId);
+      if (routeDetail.success && routeDetail.data) {
+        const returnRouteId = (routeDetail.data as any).pairedRouteId;
+        if (returnRouteId) {
+          const returnSuggestionsResponse = await (apiClient as any).getRouteStopSuggestions(returnRouteId);
+          if (returnSuggestionsResponse.success && returnSuggestionsResponse.data) {
+            const returnStops = (returnSuggestionsResponse.data as any).stops || [];
+            stopsWithStudents.push(...returnStops);
+            returnStops.forEach((stop: any) => {
+              if (stop.students && Array.isArray(stop.students)) {
+                stop.students.forEach((s: any) => {
+                  allAssignedStudents.add(s.maHocSinh || s.id);
+                });
+              }
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [MANUAL MODE] Không thể lấy học sinh từ tuyến về:', err);
+    }
+    
+    // Lấy danh sách học sinh đã chọn thủ công
+    const manuallySelectedStudents = new Set<number>();
+    for (const studentIds of selectedStudentsByStop.values()) {
+      studentIds.forEach(id => manuallySelectedStudents.add(id));
+    }
+    
+    // Xóa tất cả học sinh KHÔNG được chọn thủ công
+    const studentsToRemove = Array.from(allAssignedStudents).filter(
+      id => !manuallySelectedStudents.has(id)
+    );
+    
+    if (studentsToRemove.length > 0) {
+      console.log(`🗑️ [MANUAL MODE] Xóa ${studentsToRemove.length} học sinh đã được gán tự động (không được chọn thủ công)`);
+      
+      // Xóa từng học sinh khỏi tất cả stops (cả tuyến đi và tuyến về)
+      for (const stop of stopsWithStudents) {
+        if (!stop.maDiem) continue;
+        
+        // Xác định routeId (có thể là tuyến đi hoặc tuyến về)
+        let targetRouteId = routeId;
+        try {
+          const routeDetail = await apiClient.getRouteById(routeId);
+          if (routeDetail.success && routeDetail.data) {
+            const returnRouteId = (routeDetail.data as any).pairedRouteId;
+            if (returnRouteId) {
+              const returnStopsResponse = await apiClient.getRouteStops(returnRouteId);
+              if (returnStopsResponse.success && returnStopsResponse.data) {
+                const returnStops = (returnStopsResponse.data as any).stops || [];
+                const isInReturnRoute = returnStops.some((rs: any) => rs.maDiem === stop.maDiem);
+                if (isInReturnRoute) {
+                  targetRouteId = returnRouteId;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('⚠️ [MANUAL MODE] Không thể xác định routeId, dùng tuyến đi:', err);
+        }
+        
+        // Kiểm tra xem stop này có học sinh cần xóa không
+        if (stop.students && Array.isArray(stop.students)) {
+          const stopStudentsToRemove = stop.students
+            .filter((s: any) => studentsToRemove.includes(s.maHocSinh || s.id))
+            .map((s: any) => s.maHocSinh || s.id);
+          
+          for (const studentId of stopStudentsToRemove) {
+            try {
+              await apiClient.removeStudentFromStop(targetRouteId, stop.maDiem, studentId);
+              console.log(`  ✅ [MANUAL MODE] Đã xóa học sinh ${studentId} khỏi điểm dừng ${stop.maDiem} (route ${targetRouteId})`);
+            } catch (removeErr) {
+              console.warn(`  ⚠️ [MANUAL MODE] Không thể xóa học sinh ${studentId} khỏi điểm dừng ${stop.maDiem}:`, removeErr);
+            }
+          }
+        }
+      }
+    }
+    
+    // Đợi một chút để đảm bảo các xóa đã hoàn tất
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Reload lại danh sách stops sau khi xóa
+    const refreshedRouteStopsResponse = await apiClient.getRouteStops(routeId);
+    let refreshedStops = routeStops;
+    if (refreshedRouteStopsResponse.success && refreshedRouteStopsResponse.data) {
+      refreshedStops = (refreshedRouteStopsResponse.data as any).stops || [];
+    }
+    
+    // BƯỚC 2: Lưu học sinh đã chọn thủ công
+    console.log(`💾 [MANUAL MODE] BƯỚC 2: Lưu học sinh đã chọn thủ công (${selectedStudentsByStop.size} điểm dừng)`);
+    console.log(`🔍 [MANUAL MODE] Refreshed stops count: ${refreshedStops.length}`);
+    console.log(`🔍 [MANUAL MODE] Refreshed stops:`, refreshedStops.map((rs: any) => ({ 
+      maDiem: rs.maDiem, 
+      tenDiem: rs.tenDiem, 
+      viDo: rs.viDo, 
+      kinhDo: rs.kinhDo,
+      sequence: rs.sequence 
+    })));
+    console.log(`🔍 [MANUAL MODE] Selected students by stop:`, Array.from(selectedStudentsByStop.entries()).map(([stopId, studentIds]) => ({
+      stopId,
+      studentCount: studentIds.length,
+      studentIds: studentIds
+    })));
+    console.log(`🔍 [MANUAL MODE] Available stops in frontend:`, stops.map(s => ({
+      id: s.id,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng
+    })));
+    console.log(`🔍 [MANUAL MODE] Pending stop:`, pendingStop ? {
+      id: pendingStop.id,
+      name: pendingStop.name,
+      lat: pendingStop.lat,
+      lng: pendingStop.lng
+    } : null);
+    
+    // 🔥 Nếu không có stops từ backend, thử tạo stops từ frontend stops trước
+    if (refreshedStops.length === 0 && stops.length > 0) {
+      console.warn(`⚠️ [MANUAL MODE] Không có stops từ backend, thử tạo stops từ frontend...`);
+      console.warn(`⚠️ [MANUAL MODE] Frontend stops count: ${stops.length}`);
+      
+      // Tạo stops từ frontend stops (bao gồm cả origin và destination nếu cần)
+      const allFrontendStops = [
+        ...(originStop ? [{
+          name: originStop.name,
+          address: originStop.address,
+          lat: originStop.lat,
+          lng: originStop.lng,
+          sequence: 1
+        }] : []),
+        ...stops.map((s, idx) => ({
+          name: s.name,
+          address: s.address,
+          lat: s.lat,
+          lng: s.lng,
+          sequence: idx + 2
+        })),
+        ...(destinationStop ? [{
+          name: destinationStop.name,
+          address: destinationStop.address,
+          lat: destinationStop.lat,
+          lng: destinationStop.lng,
+          sequence: stops.length + 2
+        }] : [])
+      ];
+      
+      for (const frontendStop of allFrontendStops) {
+        if (frontendStop.lat && frontendStop.lng) {
+          try {
+            const stopPayload: any = {
+              tenDiem: frontendStop.name.trim(),
+              address: frontendStop.address?.trim() || undefined,
+              sequence: frontendStop.sequence,
+              viDo: Number(frontendStop.lat),
+              kinhDo: Number(frontendStop.lng),
+            };
+            console.log(`🔧 [MANUAL MODE] Creating stop:`, stopPayload);
+            await apiClient.addStopToRoute(routeId, stopPayload);
+            console.log(`✅ [MANUAL MODE] Đã tạo stop từ frontend: ${frontendStop.name} (sequence: ${frontendStop.sequence})`);
+          } catch (err: any) {
+            console.error(`❌ [MANUAL MODE] Không thể tạo stop từ frontend:`, err);
+            console.error(`❌ [MANUAL MODE] Stop data:`, frontendStop);
+          }
+        }
+      }
+      
+      // Đợi một chút và reload lại stops
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const reloadResponse = await apiClient.getRouteStops(routeId);
+      if (reloadResponse.success && reloadResponse.data) {
+        // Backend trả về data là array trực tiếp, không phải {stops: [...]}
+        refreshedStops = Array.isArray(reloadResponse.data) 
+          ? reloadResponse.data 
+          : (reloadResponse.data as any).stops || [];
+        console.log(`🔍 [MANUAL MODE] Reloaded ${refreshedStops.length} stops sau khi tạo từ frontend`);
+      }
+    }
+    
+    for (const [pendingStopId, studentIds] of selectedStudentsByStop.entries()) {
+      console.log(`🔍 [MANUAL MODE] Đang tìm stop cho stopId: ${pendingStopId}, có ${studentIds.length} học sinh`);
+      
+      // Tìm stop tương ứng trong pending stop hoặc confirmed stops
+      let matchedStop: any = null;
+      
+      // Tìm trong pending stop
+      if (pendingStop && pendingStop.id === pendingStopId && pendingStop.lat && pendingStop.lng) {
+        console.log(`🔍 [MANUAL MODE] Tìm trong pending stop: lat=${pendingStop.lat}, lng=${pendingStop.lng}`);
+        matchedStop = refreshedStops.find((rs: any) => {
+          if (!rs.viDo || !rs.kinhDo) return false;
+          const latDiff = Math.abs(Number(rs.viDo) - Number(pendingStop.lat!));
+          const lngDiff = Math.abs(Number(rs.kinhDo) - Number(pendingStop.lng!));
+          // Tăng threshold lên 0.001 (khoảng 100m) để linh hoạt hơn với việc làm tròn số
+          const isMatch = latDiff < 0.001 && lngDiff < 0.001;
+          if (isMatch) {
+            console.log(`✅ [MANUAL MODE] Match found: ${rs.tenDiem} (maDiem: ${rs.maDiem}), diff: lat=${latDiff}, lng=${lngDiff}`);
+          }
+          return isMatch;
+        });
+      }
+      
+      // Tìm trong confirmed stops
+      if (!matchedStop) {
+        const confirmedStop = stops.find(s => s.id === pendingStopId);
+        if (confirmedStop && confirmedStop.lat && confirmedStop.lng) {
+          console.log(`🔍 [MANUAL MODE] Tìm trong confirmed stops: lat=${confirmedStop.lat}, lng=${confirmedStop.lng}`);
+          matchedStop = refreshedStops.find((rs: any) => {
+            if (!rs.viDo || !rs.kinhDo) return false;
+            const latDiff = Math.abs(Number(rs.viDo) - Number(confirmedStop.lat!));
+            const lngDiff = Math.abs(Number(rs.kinhDo) - Number(confirmedStop.lng!));
+            // Tăng threshold lên 0.001 (khoảng 100m) để linh hoạt hơn với việc làm tròn số
+            const isMatch = latDiff < 0.001 && lngDiff < 0.001;
+            if (isMatch) {
+              console.log(`✅ [MANUAL MODE] Match found: ${rs.tenDiem} (maDiem: ${rs.maDiem}), diff: lat=${latDiff}, lng=${lngDiff}`);
+            }
+            return isMatch;
+          });
+        } else {
+          console.warn(`⚠️ [MANUAL MODE] Không tìm thấy confirmed stop với id: ${pendingStopId}`);
+        }
+      }
+      
+      // Nếu vẫn không match được, thử match bằng tên điểm dừng (fallback)
+      if (!matchedStop) {
+        const confirmedStop = stops.find(s => s.id === pendingStopId);
+        if (confirmedStop && confirmedStop.name) {
+          console.log(`🔍 [MANUAL MODE] Thử match bằng tên: "${confirmedStop.name}"`);
+          matchedStop = refreshedStops.find((rs: any) => {
+            return rs.tenDiem && rs.tenDiem.trim() === confirmedStop.name.trim();
+          });
+          if (matchedStop) {
+            console.log(`✅ [MANUAL MODE] Match found bằng tên: ${matchedStop.tenDiem} (maDiem: ${matchedStop.maDiem})`);
+          }
+        }
+      }
+      
+      if (matchedStop && studentIds.length > 0) {
+        try {
+          console.log(`💾 [MANUAL MODE] Đang lưu ${studentIds.length} học sinh vào stop ${matchedStop.maDiem} (${matchedStop.tenDiem})`);
+          await apiClient.bulkAddStudentsToStop(routeId, matchedStop.maDiem, studentIds);
+          studentIds.forEach(id => assignedStudentIds.add(id));
+          console.log(`✅ [MANUAL MODE] Đã lưu ${studentIds.length} học sinh (thủ công) vào điểm dừng ${matchedStop.maDiem} (${matchedStop.tenDiem})`);
+        } catch (error: any) {
+          console.error(`❌ [MANUAL MODE] Lỗi khi lưu học sinh vào stop ${matchedStop.maDiem}:`, error);
+          console.error(`❌ [MANUAL MODE] Error details:`, error?.message, error?.response?.data);
+        }
+      } else if (!matchedStop) {
+        console.warn(`⚠️ [MANUAL MODE] Không tìm thấy điểm dừng tương ứng cho stopId: ${pendingStopId}`);
+        console.warn(`⚠️ [MANUAL MODE] Available stops:`, refreshedStops.map((rs: any) => ({ 
+          maDiem: rs.maDiem, 
+          tenDiem: rs.tenDiem, 
+          viDo: rs.viDo, 
+          kinhDo: rs.kinhDo 
+        })));
+      } else if (studentIds.length === 0) {
+        console.warn(`⚠️ [MANUAL MODE] Stop ${matchedStop.maDiem} matched nhưng không có học sinh nào để lưu`);
+      }
+    }
+    
+    console.log(`✅ [MANUAL MODE] Hoàn tất - Đã lưu ${assignedStudentIds.size} học sinh (thủ công) vào ${selectedStudentsByStop.size} điểm dừng`);
+  };
+
+  // 🔥 HÀM RIÊNG: Xử lý gán học sinh TỰ ĐỘNG
+  const handleAutoStudentAssignment = async (routeId: number, routeStops: any[]) => {
+    console.log(`🤖 [AUTO MODE] Bắt đầu xử lý gán học sinh tự động cho route ${routeId}`);
+    
+    if (routeStops.length === 0) {
+      console.log(`🤖 [AUTO MODE] Không có điểm dừng, bỏ qua`);
+      return;
+    }
+
+    const assignedStudentIds = new Set<number>();
+    const MAX_DISTANCE_METERS = 500; // 500m
+    let totalAutoAssigned = 0;
+    
+    console.log(`🔄 [AUTO MODE] Tự động scan học sinh gần các điểm dừng...`);
+    
+    for (const stop of routeStops) {
+      if (!stop.viDo || !stop.kinhDo) continue;
+      
+      try {
+        // Tìm học sinh trong bán kính 500m từ điểm dừng
+        const nearbyResponse = await apiClient.findStudentsNearby({
+          lat: stop.viDo,
+          lng: stop.kinhDo,
+          radiusMeters: MAX_DISTANCE_METERS,
+        });
+        
+        if (nearbyResponse.success && nearbyResponse.data) {
+          const nearbyStudents = Array.isArray(nearbyResponse.data) 
+            ? nearbyResponse.data 
+            : (nearbyResponse.data as any).students || [];
+          
+          // Lọc học sinh chưa được gán
+          const unassignedStudents = nearbyStudents
+            .filter((s: any) => !assignedStudentIds.has(s.maHocSinh || s.id))
+            .map((s: any) => s.maHocSinh || s.id);
+          
+          if (unassignedStudents.length > 0) {
+            await apiClient.bulkAddStudentsToStop(routeId, stop.maDiem, unassignedStudents);
+            unassignedStudents.forEach((id: number) => assignedStudentIds.add(id));
+            totalAutoAssigned += unassignedStudents.length;
+            console.log(`✅ [AUTO MODE] Đã tự động gán ${unassignedStudents.length} học sinh vào điểm dừng ${stop.maDiem} (${stop.tenDiem})`);
+          }
+        }
+      } catch (error: any) {
+        console.warn(`⚠️ [AUTO MODE] Không thể scan học sinh cho điểm dừng ${stop.maDiem}:`, error);
+        // Tiếp tục với điểm dừng tiếp theo
+      }
+    }
+    
+    if (totalAutoAssigned > 0) {
+      console.log(`✅ [AUTO MODE] Tổng cộng đã tự động gán ${totalAutoAssigned} học sinh vào ${routeStops.length} điểm dừng`);
+      toast({
+        title: 'Đã tự động gán học sinh',
+        description: `Đã tự động gán ${totalAutoAssigned} học sinh vào các điểm dừng (trong bán kính 500m)`,
+        variant: 'default',
+      });
+    } else {
+      console.log(`ℹ️ [AUTO MODE] Không tìm thấy học sinh nào trong bán kính 500m từ các điểm dừng`);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!routeName.trim()) {
       toast({
@@ -4313,6 +4695,7 @@ export function RouteBuilder({
         routeType: 'di', // Mặc định là tuyến đi
         createReturnRoute: true, // Tự động tạo tuyến về
         stops: allStops, // Gửi danh sách stops để backend tự động tạo tuyến về với stops đảo ngược
+        skipAutoAssign: selectedStudentsByStop.size > 0, // 🔥 Bỏ qua tự động gán nếu frontend sẽ gán học sinh thủ công
       };
 
       if (mode === 'edit' && initialRoute?.id) {
@@ -4364,6 +4747,15 @@ export function RouteBuilder({
           title: 'Thành công',
           description: 'Đã cập nhật tuyến đường',
         });
+        
+        // 🔥 Clear localStorage sau khi update route thành công (nếu có)
+        try {
+          localStorage.removeItem('route_builder_selected_students');
+          console.log('🗑️ Cleared selected students from localStorage after route update');
+        } catch (err) {
+          console.warn('⚠️ Failed to clear localStorage:', err);
+        }
+        
         onSaved?.(updatedRouteData);
         onClose();
       } else {
@@ -4408,6 +4800,38 @@ export function RouteBuilder({
         );
 
         console.log('🔍 Tìm thấy route ID:', newRouteId, 'từ data:', routeData);
+        console.log('🔍 Route data full:', JSON.stringify(routeData, null, 2));
+        
+        // Lấy returnRouteId nếu có (tuyến về)
+        let returnRouteId: number | null = null;
+        if (routePayload.createReturnRoute) {
+          // Thử lấy từ nhiều vị trí có thể
+          returnRouteId = Number(
+            routeData.pairedRouteId ||
+            routeData.returnRouteId ||
+            (result as any).pairedRouteId ||
+            (result as any).returnRouteId ||
+            (result as any).data?.pairedRouteId ||
+            (result as any).data?.returnRouteId
+          ) || null;
+          
+          if (returnRouteId && !isNaN(returnRouteId)) {
+            console.log('🔍 Tìm thấy return route ID:', returnRouteId);
+          } else {
+            // Nếu không có trong response, thử query lại route để lấy pairedRouteId
+            try {
+              const routeDetail = await apiClient.getRouteById(newRouteId);
+              if (routeDetail.success && routeDetail.data) {
+                returnRouteId = Number((routeDetail.data as any).pairedRouteId) || null;
+                if (returnRouteId) {
+                  console.log('🔍 Tìm thấy return route ID từ route detail:', returnRouteId);
+                }
+              }
+            } catch (err) {
+              console.warn('⚠️ Không thể lấy route detail để tìm returnRouteId:', err);
+            }
+          }
+        }
 
         if (!newRouteId || isNaN(newRouteId)) {
           console.error('❌ Không thể lấy ID tuyến đường. Response:', result);
@@ -4648,106 +5072,187 @@ export function RouteBuilder({
           console.log('✅ Backend đã tự động thêm stops vào tuyến đi và tuyến về');
         }
 
-        // Lưu student_stop_suggestions: Ưu tiên học sinh đã chọn thủ công, nếu không có thì tự động scan
+        // 🔥 TÁCH RIÊNG: Xử lý gán học sinh THỦ CÔNG hoặc TỰ ĐỘNG (KHÔNG chạy cả hai)
         try {
-          // Lấy danh sách stops từ route vừa tạo
-          const routeStopsResponse = await apiClient.getRouteStops(newRouteId);
-          if (routeStopsResponse.success && routeStopsResponse.data) {
-            const routeStops = (routeStopsResponse.data as any).stops || [];
-            const assignedStudentIds = new Set<number>(); // Track học sinh đã được gán để tránh trùng
+          // 🔥 Kiểm tra selectedStudentsByStop trước khi tiếp tục
+          console.log(`🔍 [ROUTE CREATION] Checking selectedStudentsByStop:`, {
+            size: selectedStudentsByStop.size,
+            entries: Array.from(selectedStudentsByStop.entries()).map(([stopId, studentIds]) => ({
+              stopId,
+              studentCount: studentIds.length,
+              studentIds: studentIds.slice(0, 5) // Chỉ log 5 đầu tiên để không quá dài
+            }))
+          });
+          
+          // 🔥 Retry logic: Đợi và retry để đảm bảo stops đã được lưu vào DB
+          let routeStops: any[] = [];
+          let routeStopsResponse: any = null;
+          const maxRetries = 5;
+          const retryDelay = 1000; // 1 giây
+          
+          for (let retry = 0; retry < maxRetries; retry++) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
             
-            // BƯỚC 1: Lưu học sinh đã chọn thủ công (nếu có)
+            routeStopsResponse = await apiClient.getRouteStops(newRouteId);
+            if (routeStopsResponse.success && routeStopsResponse.data) {
+              // Backend trả về data là array trực tiếp, không phải {stops: [...]}
+              routeStops = Array.isArray(routeStopsResponse.data) 
+                ? routeStopsResponse.data 
+                : (routeStopsResponse.data as any).stops || [];
+              console.log(`🔍 [ROUTE CREATION] Attempt ${retry + 1}/${maxRetries}: Loaded ${routeStops.length} stops from route ${newRouteId}`);
+              console.log(`🔍 [ROUTE CREATION] Response data type:`, Array.isArray(routeStopsResponse.data) ? 'array' : typeof routeStopsResponse.data);
+              console.log(`🔍 [ROUTE CREATION] Response data:`, routeStopsResponse.data);
+              
+              // Nếu có stops hoặc đã retry đủ số lần, dừng lại
+              if (routeStops.length > 0 || retry === maxRetries - 1) {
+                break;
+              }
+            } else {
+              console.warn(`⚠️ [ROUTE CREATION] Attempt ${retry + 1}/${maxRetries}: Failed to get stops:`, routeStopsResponse);
+            }
+          }
+          
+          if (routeStops.length > 0) {
+            console.log(`✅ [ROUTE CREATION] Successfully loaded ${routeStops.length} stops from route ${newRouteId}`);
+            console.log(`🔍 [ROUTE CREATION] Route stops details:`, routeStops.map((rs: any) => ({
+              maDiem: rs.maDiem,
+              tenDiem: rs.tenDiem,
+              viDo: rs.viDo,
+              kinhDo: rs.kinhDo,
+              sequence: rs.sequence
+            })));
+            
+            // 🔥 QUYẾT ĐỊNH: Chỉ chạy MỘT trong hai hàm - THỦ CÔNG hoặc TỰ ĐỘNG
             if (selectedStudentsByStop.size > 0) {
-              for (const [pendingStopId, studentIds] of selectedStudentsByStop.entries()) {
-                // Tìm stop tương ứng trong pending stop hoặc confirmed stops
-                let matchedStop: any = null;
+              // MODE THỦ CÔNG: Có học sinh được chọn thủ công → Chỉ chạy hàm thủ công
+              console.log(`📝 [ROUTE CREATION] Phát hiện học sinh được chọn thủ công (${selectedStudentsByStop.size} stops) → Chạy MODE THỦ CÔNG`);
+              console.log(`📝 [ROUTE CREATION] Total students to assign:`, 
+                Array.from(selectedStudentsByStop.values()).reduce((sum, ids) => sum + ids.length, 0)
+              );
+              await handleManualStudentAssignment(newRouteId, routeStops);
+              
+              // 🔥 Xử lý tuyến về tương tự tuyến đi
+              if (returnRouteId) {
+                console.log(`📝 [ROUTE CREATION] Phát hiện tuyến về (ID: ${returnRouteId}), xử lý học sinh thủ công...`);
                 
-                // Tìm trong pending stop
-                if (pendingStop && pendingStop.id === pendingStopId && pendingStop.lat && pendingStop.lng) {
-                  matchedStop = routeStops.find((rs: any) => {
-                    if (!rs.viDo || !rs.kinhDo) return false;
-                    const latDiff = Math.abs(rs.viDo - pendingStop.lat!);
-                    const lngDiff = Math.abs(rs.kinhDo - pendingStop.lng!);
-                    return latDiff < 0.0001 && lngDiff < 0.0001;
-                  });
-                }
-                
-                // Tìm trong confirmed stops
-                if (!matchedStop) {
-                  const confirmedStop = stops.find(s => s.id === pendingStopId);
-                  if (confirmedStop && confirmedStop.lat && confirmedStop.lng) {
-                    matchedStop = routeStops.find((rs: any) => {
-                      if (!rs.viDo || !rs.kinhDo) return false;
-                      const latDiff = Math.abs(rs.viDo - confirmedStop.lat!);
-                      const lngDiff = Math.abs(rs.kinhDo - confirmedStop.lng!);
-                      return latDiff < 0.0001 && lngDiff < 0.0001;
-                    });
+                // Lấy stops của tuyến về
+                let returnRouteStops: any[] = [];
+                const returnMaxRetries = 5;
+                for (let retry = 0; retry < returnMaxRetries; retry++) {
+                  await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                  const returnStopsResponse = await apiClient.getRouteStops(returnRouteId);
+                  if (returnStopsResponse.success && returnStopsResponse.data) {
+                    returnRouteStops = Array.isArray(returnStopsResponse.data) 
+                      ? returnStopsResponse.data 
+                      : (returnStopsResponse.data as any).stops || [];
+                    console.log(`🔍 [ROUTE CREATION] Attempt ${retry + 1}/${returnMaxRetries}: Loaded ${returnRouteStops.length} stops from return route ${returnRouteId}`);
+                    if (returnRouteStops.length > 0 || retry === returnMaxRetries - 1) {
+                      break;
+                    }
                   }
                 }
                 
-                if (matchedStop && studentIds.length > 0) {
-                  await apiClient.bulkAddStudentsToStop(newRouteId, matchedStop.maDiem, studentIds);
-                  studentIds.forEach(id => assignedStudentIds.add(id));
-                  console.log(`✅ Đã lưu ${studentIds.length} học sinh (thủ công) vào điểm dừng ${matchedStop.maDiem}`);
+                if (returnRouteStops.length > 0) {
+                  console.log(`✅ [ROUTE CREATION] Successfully loaded ${returnRouteStops.length} stops from return route ${returnRouteId}`);
+                  await handleManualStudentAssignment(returnRouteId, returnRouteStops);
+                } else {
+                  console.warn(`⚠️ [ROUTE CREATION] Không thể lấy stops từ tuyến về ${returnRouteId}`);
+                }
+              } else if (routePayload.createReturnRoute) {
+                console.warn(`⚠️ [ROUTE CREATION] Không tìm thấy returnRouteId trong response`);
+              }
+            } else {
+              // MODE TỰ ĐỘNG: Không có học sinh được chọn thủ công → Chạy hàm tự động
+              console.log(`🤖 [ROUTE CREATION] Không có học sinh được chọn thủ công → Chạy MODE TỰ ĐỘNG`);
+              await handleAutoStudentAssignment(newRouteId, routeStops);
+              
+              // 🔥 Xử lý tuyến về tương tự tuyến đi (auto mode)
+              if (returnRouteId) {
+                console.log(`🤖 [ROUTE CREATION] Phát hiện tuyến về (ID: ${returnRouteId}), xử lý học sinh tự động...`);
+                
+                // Lấy stops của tuyến về
+                let returnRouteStops: any[] = [];
+                const returnMaxRetries = 5;
+                for (let retry = 0; retry < returnMaxRetries; retry++) {
+                  await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                  const returnStopsResponse = await apiClient.getRouteStops(returnRouteId);
+                  if (returnStopsResponse.success && returnStopsResponse.data) {
+                    returnRouteStops = Array.isArray(returnStopsResponse.data) 
+                      ? returnStopsResponse.data 
+                      : (returnStopsResponse.data as any).stops || [];
+                    if (returnRouteStops.length > 0 || retry === returnMaxRetries - 1) {
+                      break;
+                    }
+                  }
+                }
+                
+                if (returnRouteStops.length > 0) {
+                  await handleAutoStudentAssignment(returnRouteId, returnRouteStops);
                 }
               }
             }
+          } else {
+            console.error(`❌ [ROUTE CREATION] Không thể lấy stops từ route ${newRouteId} sau ${maxRetries} lần thử`);
+            console.error(`❌ [ROUTE CREATION] Response:`, routeStopsResponse);
+            console.error(`❌ [ROUTE CREATION] Expected stops count: ${routePayload.stops?.length || 0} (from payload)`);
             
-            // BƯỚC 2: Tự động scan và gán học sinh gần các điểm dừng (nếu chưa có học sinh nào được gán)
-            if (assignedStudentIds.size === 0 && routeStops.length > 0) {
-              console.log(`🔄 Tự động scan học sinh gần các điểm dừng...`);
-              const MAX_DISTANCE_METERS = 500; // 3km
-              let totalAutoAssigned = 0;
+            // 🔥 FIX: Nếu không có stops từ backend, tạo stops từ frontend stops trước
+            if (routePayload.stops && routePayload.stops.length > 0) {
+              console.warn(`⚠️ [ROUTE CREATION] Backend không có stops, thử tạo stops từ frontend...`);
+              console.warn(`⚠️ [ROUTE CREATION] Frontend stops:`, routePayload.stops);
               
-              for (const stop of routeStops) {
-                if (!stop.viDo || !stop.kinhDo) continue;
-                
+              // Tạo stops từ payload
+              for (const stopPayload of routePayload.stops) {
                 try {
-                  // Tìm học sinh trong bán kính 3km từ điểm dừng
-                  const nearbyResponse = await apiClient.findStudentsNearby({
-                    lat: stop.viDo,
-                    lng: stop.kinhDo,
-                    radiusMeters: MAX_DISTANCE_METERS,
-                  });
+                  const stopData: any = {
+                    tenDiem: stopPayload.tenDiem || stopPayload.name,
+                    address: stopPayload.address || undefined,
+                    sequence: stopPayload.sequence,
+                    viDo: stopPayload.viDo || stopPayload.lat,
+                    kinhDo: stopPayload.kinhDo || stopPayload.lng,
+                  };
                   
-                  if (nearbyResponse.success && nearbyResponse.data) {
-                    const nearbyStudents = Array.isArray(nearbyResponse.data) 
-                      ? nearbyResponse.data 
-                      : (nearbyResponse.data as any).students || [];
-                    
-                    // Lọc học sinh chưa được gán
-                    const unassignedStudents = nearbyStudents
-                      .filter((s: any) => !assignedStudentIds.has(s.maHocSinh || s.id))
-                      .map((s: any) => s.maHocSinh || s.id);
-                    
-                    if (unassignedStudents.length > 0) {
-                      await apiClient.bulkAddStudentsToStop(newRouteId, stop.maDiem, unassignedStudents);
-                      unassignedStudents.forEach((id: number) => assignedStudentIds.add(id));
-                      totalAutoAssigned += unassignedStudents.length;
-                      console.log(`✅ Đã tự động gán ${unassignedStudents.length} học sinh vào điểm dừng ${stop.maDiem} (${stop.tenDiem})`);
-                    }
-                  }
-                } catch (error: any) {
-                  console.warn(`⚠️ Không thể scan học sinh cho điểm dừng ${stop.maDiem}:`, error);
-                  // Tiếp tục với điểm dừng tiếp theo
+                  console.log(`🔧 [ROUTE CREATION] Creating stop:`, stopData);
+                  await apiClient.addStopToRoute(newRouteId, stopData);
+                  console.log(`✅ [ROUTE CREATION] Created stop: ${stopData.tenDiem}`);
+                } catch (stopError: any) {
+                  console.error(`❌ [ROUTE CREATION] Failed to create stop:`, stopError);
+                  console.error(`❌ [ROUTE CREATION] Stop data:`, stopPayload);
                 }
               }
               
-              if (totalAutoAssigned > 0) {
-                console.log(`✅ Tổng cộng đã tự động gán ${totalAutoAssigned} học sinh vào ${routeStops.length} điểm dừng`);
+              // Đợi một chút và reload lại stops
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              const reloadResponse = await apiClient.getRouteStops(newRouteId);
+              if (reloadResponse.success && reloadResponse.data) {
+                // Backend trả về data là array trực tiếp, không phải {stops: [...]}
+                routeStops = Array.isArray(reloadResponse.data) 
+                  ? reloadResponse.data 
+                  : (reloadResponse.data as any).stops || [];
+                console.log(`✅ [ROUTE CREATION] Reloaded ${routeStops.length} stops sau khi tạo từ frontend`);
+              }
+            }
+            
+            // Nếu có selectedStudentsByStop, thử lưu học sinh
+            if (selectedStudentsByStop.size > 0) {
+              if (routeStops.length > 0) {
+                console.log(`📝 [ROUTE CREATION] Có ${routeStops.length} stops, tiếp tục lưu học sinh thủ công...`);
+                await handleManualStudentAssignment(newRouteId, routeStops);
+              } else {
+                console.warn(`⚠️ [ROUTE CREATION] Vẫn không có stops sau khi tạo, bỏ qua lưu học sinh`);
                 toast({
-                  title: 'Đã tự động gán học sinh',
-                  description: `Đã tự động gán ${totalAutoAssigned} học sinh vào các điểm dừng (trong bán kính 3km)`,
+                  title: 'Cảnh báo',
+                  description: 'Route đã được tạo nhưng không thể lưu học sinh vì không có stops. Vui lòng thêm stops thủ công.',
                   variant: 'default',
                 });
-              } else {
-                console.log(`ℹ️ Không tìm thấy học sinh nào trong bán kính 3km từ các điểm dừng`);
               }
             }
           }
         } catch (suggestionError: any) {
-          console.warn('⚠️ Không thể lưu suggestions:', suggestionError);
-          // Không throw error, chỉ log warning
+          console.error('❌ [ROUTE CREATION] Lỗi khi lưu suggestions:', suggestionError);
+          console.error('❌ [ROUTE CREATION] Error stack:', suggestionError?.stack);
+          console.error('❌ [ROUTE CREATION] Error message:', suggestionError?.message);
+          // Không throw error, chỉ log warning để không block việc tạo route
         }
         
         // Invalidate routes cache để refresh danh sách
@@ -4757,6 +5262,15 @@ export function RouteBuilder({
           title: 'Thành công',
           description: routePayload.createReturnRoute ? 'Đã tạo tuyến đi và tuyến về' : 'Đã tạo tuyến đường mới',
         });
+        
+        // 🔥 Clear localStorage sau khi tạo route thành công
+        try {
+          localStorage.removeItem('route_builder_selected_students');
+          console.log('🗑️ Cleared selected students from localStorage after route creation');
+        } catch (err) {
+          console.warn('⚠️ Failed to clear localStorage:', err);
+        }
+        
         onSaved?.(routeData);
         onClose();
       }
@@ -4816,13 +5330,170 @@ export function RouteBuilder({
           setStopDetailStudents([]);
         }
       } else {
-        // Nếu đang tạo route mới, không có học sinh từ API
-        setStopDetailStudents([]);
+        // Nếu đang tạo route mới, lấy học sinh từ selectedStudentsByStop
+        const stopId = stop.id;
+        
+        // 🔥 FIX: Tìm học sinh theo cả stopId và match theo lat/lng (fallback)
+        let selectedStudentIds = selectedStudentsByStop.get(stopId) || [];
+        
+        // Nếu không tìm thấy theo ID, thử tìm theo tọa độ (match với pending stop hoặc confirmed stop)
+        if (selectedStudentIds.length === 0 && stop.lat && stop.lng) {
+          // Tìm trong selectedStudentsByStop bằng cách match tọa độ
+          for (const [key, studentIds] of selectedStudentsByStop.entries()) {
+            // Tìm stop tương ứng trong stops hoặc pendingStop
+            const matchingStop = stops.find(s => s.id === key) || (pendingStop && pendingStop.id === key ? pendingStop : null);
+            if (matchingStop && matchingStop.lat && matchingStop.lng) {
+              const latDiff = Math.abs(matchingStop.lat - stop.lat);
+              const lngDiff = Math.abs(matchingStop.lng - stop.lng);
+              if (latDiff < 0.0001 && lngDiff < 0.0001) {
+                selectedStudentIds = studentIds;
+                console.log(`🔍 Found students by coordinate match in handleViewStopDetail: ${studentIds.length} students`);
+                break;
+              }
+            }
+          }
+        }
+        
+        if (selectedStudentIds.length > 0) {
+          // Lấy thông tin đầy đủ của học sinh từ allStudents hoặc nearbyStudents
+          const studentsData: Array<{
+            maHocSinh: number;
+            hoTen: string;
+            lop: string;
+            diaChi: string;
+            anhDaiDien?: string;
+          }> = [];
+          
+          // Tìm học sinh trong allStudents trước
+          selectedStudentIds.forEach((studentId) => {
+            let studentFound = false;
+            
+            // Tìm trong allStudents trước
+            const student = allStudents.find((s) => s.maHocSinh === studentId);
+            if (student) {
+              studentsData.push({
+                maHocSinh: student.maHocSinh,
+                hoTen: student.hoTen,
+                lop: student.lop || '',
+                diaChi: student.diaChi || '',
+                anhDaiDien: student.anhDaiDien || undefined,
+              });
+              studentFound = true;
+            } else {
+              // Nếu không tìm thấy trong allStudents, thử tìm trong nearbyStudents
+              const nearbyStudent = nearbyStudents.find((s) => s.maHocSinh === studentId);
+              if (nearbyStudent) {
+                studentsData.push({
+                  maHocSinh: nearbyStudent.maHocSinh,
+                  hoTen: nearbyStudent.hoTen,
+                  lop: nearbyStudent.lop || '',
+                  diaChi: nearbyStudent.diaChi || '',
+                  anhDaiDien: nearbyStudent.anhDaiDien || undefined,
+                });
+                studentFound = true;
+              }
+            }
+            
+            // Nếu vẫn không tìm thấy, log warning
+            if (!studentFound) {
+              console.warn(`⚠️ Không tìm thấy thông tin học sinh ${studentId} trong allStudents hoặc nearbyStudents`);
+            }
+          });
+          
+          console.log(`🔍 Debug: stopId=${stopId}, selectedStudentIds=${selectedStudentIds.length}, found=${studentsData.length}`);
+          console.log(`   allStudents count: ${allStudents.length}, nearbyStudents count: ${nearbyStudents.length}`);
+          
+          setStopDetailStudents(studentsData);
+          console.log(`✅ Loaded ${studentsData.length} students from selectedStudentsByStop for stop ${stopId}`);
+        } else {
+          setStopDetailStudents([]);
+        }
       }
     } finally {
       setLoadingStopDetail(false);
     }
   };
+
+  // 🔥 Lưu selectedStudentsByStop vào localStorage khi thay đổi (chỉ trong create mode)
+  useEffect(() => {
+    if (mode === 'create' && selectedStudentsByStop.size > 0) {
+      try {
+        const data = Array.from(selectedStudentsByStop.entries());
+        localStorage.setItem('route_builder_selected_students', JSON.stringify(data));
+        console.log(`💾 Saved ${selectedStudentsByStop.size} stops with selected students to localStorage`);
+      } catch (err) {
+        console.warn('⚠️ Failed to save students to localStorage:', err);
+      }
+    }
+  }, [selectedStudentsByStop, mode]);
+
+  // 🔥 Cập nhật lại học sinh trong dialog "Chi tiết điểm dừng" khi selectedStudentsByStop thay đổi
+  useEffect(() => {
+    if (selectedStopDetail && mode === 'create') {
+      // Chỉ reload nếu đang ở create mode và dialog đang mở
+      const stopId = selectedStopDetail.id;
+      
+      // 🔥 FIX: Tìm học sinh theo cả stopId và match theo lat/lng (fallback)
+      let selectedStudentIds = selectedStudentsByStop.get(stopId) || [];
+      
+      // Nếu không tìm thấy theo ID, thử tìm theo tọa độ (match với pending stop hoặc confirmed stop)
+      if (selectedStudentIds.length === 0 && selectedStopDetail.lat && selectedStopDetail.lng) {
+        // Tìm trong selectedStudentsByStop bằng cách match tọa độ
+        for (const [key, studentIds] of selectedStudentsByStop.entries()) {
+          // Tìm stop tương ứng trong stops hoặc pendingStop
+          const matchingStop = stops.find(s => s.id === key) || (pendingStop && pendingStop.id === key ? pendingStop : null);
+          if (matchingStop && matchingStop.lat && matchingStop.lng) {
+            const latDiff = Math.abs(matchingStop.lat - selectedStopDetail.lat);
+            const lngDiff = Math.abs(matchingStop.lng - selectedStopDetail.lng);
+            if (latDiff < 0.0001 && lngDiff < 0.0001) {
+              selectedStudentIds = studentIds;
+              console.log(`🔍 Found students by coordinate match: ${studentIds.length} students`);
+              break;
+            }
+          }
+        }
+      }
+      
+      if (selectedStudentIds.length > 0) {
+        const studentsData: Array<{
+          maHocSinh: number;
+          hoTen: string;
+          lop: string;
+          diaChi: string;
+          anhDaiDien?: string;
+        }> = [];
+        
+        selectedStudentIds.forEach((studentId) => {
+          const student = allStudents.find((s) => s.maHocSinh === studentId);
+          if (student) {
+            studentsData.push({
+              maHocSinh: student.maHocSinh,
+              hoTen: student.hoTen,
+              lop: student.lop || '',
+              diaChi: student.diaChi || '',
+              anhDaiDien: student.anhDaiDien || undefined,
+            });
+          } else {
+            const nearbyStudent = nearbyStudents.find((s) => s.maHocSinh === studentId);
+            if (nearbyStudent) {
+              studentsData.push({
+                maHocSinh: nearbyStudent.maHocSinh,
+                hoTen: nearbyStudent.hoTen,
+                lop: nearbyStudent.lop || '',
+                diaChi: nearbyStudent.diaChi || '',
+                anhDaiDien: nearbyStudent.anhDaiDien || undefined,
+              });
+            }
+          }
+        });
+        
+        setStopDetailStudents(studentsData);
+        console.log(`🔄 Updated stopDetailStudents: ${studentsData.length} students for stop ${stopId}`);
+      } else {
+        setStopDetailStudents([]);
+      }
+    }
+  }, [selectedStudentsByStop, selectedStopDetail, mode, allStudents, nearbyStudents]);
 
   // Sortable Stop Item Component
   const SortableStopItem = React.memo(({ 
@@ -5915,23 +6586,22 @@ export function RouteBuilder({
                             return;
                           }
                           
-                          // Nếu đang edit route (có route ID), lưu ngay vào database
+                          // Lưu vào state (cả edit và create mode)
+                          const newMap = new Map(selectedStudentsByStop);
+                          const newSelected = [...currentSelected, student.maHocSinh];
+                          newMap.set(stopId, newSelected);
+                          setSelectedStudentsByStop(newMap);
+                          
+                          console.log(`✅ Đã thêm học sinh ${student.maHocSinh} (${student.hoTen}) vào stop ${stopId}`);
+                          console.log(`   Tổng số học sinh trong stop này: ${newSelected.length}`);
+                          
+                          // Nếu đang edit route (có route ID), có thể lưu ngay vào database (tùy chọn)
                           if (mode === 'edit' && initialRoute?.id) {
-                            try {
-                              const newSelected = [...currentSelected, student.maHocSinh];
-                              setSelectedStudentsByStop(new Map(selectedStudentsByStop.set(stopId, newSelected)));
-                              
-                              toast({
-                                title: 'Đã thêm học sinh',
-                                description: `${student.hoTen} sẽ được lưu khi xác nhận điểm dừng`,
-                              });
-                            } catch (error: any) {
-                              toast({
-                                title: 'Lỗi',
-                                description: error?.message || 'Không thể thêm học sinh',
-                                variant: 'destructive',
-                              });
-                            }
+                            // Có thể thêm logic lưu vào database ngay nếu cần
+                            toast({
+                              title: 'Đã thêm học sinh',
+                              description: `${student.hoTen} sẽ được lưu khi xác nhận điểm dừng`,
+                            });
                           } else {
                             // Khi tạo route mới, chỉ lưu vào state
                             const newSelected = [...currentSelected, student.maHocSinh];
@@ -5965,10 +6635,45 @@ export function RouteBuilder({
             </div>
           </ScrollArea>
           
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNearbyStudentsDialog(false)}>
-              Đóng
-            </Button>
+          <DialogFooter className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              {pendingStop && (
+                <span>
+                  Đã chọn: {selectedStudentsByStop.get(pendingStop.id)?.length || 0} / {nearbyStudents.length} học sinh
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {pendingStop && nearbyStudents.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (!pendingStop) return;
+                    const stopId = pendingStop.id;
+                    const currentSelected = selectedStudentsByStop.get(stopId) || [];
+                    const allStudentIds = nearbyStudents.map(s => s.maHocSinh);
+                    const newSelected = Array.from(new Set([...currentSelected, ...allStudentIds]));
+                    
+                    const newMap = new Map(selectedStudentsByStop);
+                    newMap.set(stopId, newSelected);
+                    setSelectedStudentsByStop(newMap);
+                    
+                    console.log(`✅ Đã thêm tất cả ${allStudentIds.length} học sinh vào stop ${stopId}`);
+                    
+                    toast({
+                      title: 'Đã thêm tất cả học sinh',
+                      description: `Đã thêm ${allStudentIds.length} học sinh vào điểm dừng này`,
+                    });
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Thêm tất cả ({nearbyStudents.length})
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowNearbyStudentsDialog(false)}>
+                Đóng
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
