@@ -225,7 +225,7 @@ export default function TripDetailPage() {
   const [routeId, setRouteId] = useState<number | string | undefined>(
     undefined
   );
-  const [demoSpeed, setDemoSpeed] = useState<number>(40); // Speed for DEMO mode (km/h)
+  const [demoSpeed, setDemoSpeed] = useState<number>(60); // Speed for DEMO mode (km/h)
   const [mapZoom, setMapZoom] = useState<number>(18); // Dynamic zoom level - tăng lên 18 để nhìn rõ hơn
   const [isLastStop, setIsLastStop] = useState<boolean>(false); // Is current stop the final stop
   const [tripType, setTripType] = useState<"don_sang" | "tra_chieu" | null>(
@@ -381,7 +381,7 @@ export default function TripDetailPage() {
     }
   }, [trip?.currentStop, trip?.stops]);
 
-  // Auto-zoom map when bus moves (smooth zoom, not too close)
+  // Auto-zoom map when bus moves (fixed zoom level for 60km/h, not dependent on speed)
   useEffect(() => {
     if (
       tripStatus === "dang_chay" &&
@@ -389,38 +389,14 @@ export default function TripDetailPage() {
       Number.isFinite(busLocation.lat) &&
       Number.isFinite(busLocation.lng)
     ) {
-      // Calculate zoom based on speed: faster = zoom out more, slower = zoom in more
-      // But keep it reasonable: between 14 (close) and 16 (very close)
-      const currentSpeedValue =
-        locationSource === "demo"
-          ? simulatorCurrentSpeed || demoSpeed
-          : currentSpeed || 30;
-
-      // Zoom formula: faster speed = lower zoom (zoom out), slower = higher zoom (zoom in)
-      // Speed range: 10-80 km/h -> Zoom range: 18-16 (tăng zoom để nhìn rõ hơn)
-      const minZoom = 16;
-      const maxZoom = 18;
-      const minSpeed = 10;
-      const maxSpeed = 80;
-
-      const normalizedSpeed = Math.max(
-        minSpeed,
-        Math.min(maxSpeed, currentSpeedValue)
-      );
-      const zoomLevel =
-        maxZoom -
-        ((normalizedSpeed - minSpeed) / (maxSpeed - minSpeed)) *
-          (maxZoom - minZoom);
-
-      setMapZoom(Math.round(zoomLevel * 10) / 10); // Round to 1 decimal
+      // Fixed zoom level equivalent to 60km/h speed
+      // Zoom calculation for 60km/h: 18 - ((60 - 10) / (400 - 10)) * (18 - 16) ≈ 17.74
+      const fixedZoomLevel = 17.7; // Fixed zoom for 60km/h equivalent
+      setMapZoom(fixedZoomLevel);
     }
   }, [
     busLocation,
     tripStatus,
-    locationSource,
-    simulatorCurrentSpeed,
-    demoSpeed,
-    currentSpeed,
   ]);
 
   // Sync atCurrentStop with simulatorAtStop in DEMO mode
@@ -3113,13 +3089,13 @@ export default function TripDetailPage() {
                       id="demo-speed"
                       type="number"
                       min={10}
-                      max={120}
+                      max={400}
                       step={5}
                       value={demoSpeed}
                       onChange={(e) => {
                         const newSpeed = Math.max(
                           10,
-                          Math.min(120, parseInt(e.target.value) || 40)
+                          Math.min(400, parseInt(e.target.value) || 60)
                         );
                         setDemoSpeed(newSpeed);
                         if (simulatorRunning) {
@@ -3147,7 +3123,7 @@ export default function TripDetailPage() {
                       disabled={!simulatorRunning && tripStatus !== "dang_chay"}
                     />
                     <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      (10-120)
+                      (10-400)
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
@@ -3877,7 +3853,7 @@ export default function TripDetailPage() {
                   updateSimulatorSpeed(newSpeed);
                 }}
                 min={10}
-                max={120}
+                max={400}
                 disabled={!simulatorRunning}
               />
             )}

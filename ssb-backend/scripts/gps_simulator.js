@@ -61,7 +61,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 
 const CONFIG = {
   tripId: parseInt(args.tripId) || 16, // Trip ID to simulate
-  speed: parseFloat(args.speed) || 40, // km/h (average city speed)
+  speed: parseFloat(args.speed) || 60, // km/h (mặc định 60, có thể tăng lên 400)
   interval: parseFloat(args.interval) || 3, // seconds between GPS updates
   username: args.username || process.env.DRIVER_EMAIL || "driver@ssb.vn", // Driver username
   password: args.password || process.env.DRIVER_PASSWORD || "driver123", // Driver password

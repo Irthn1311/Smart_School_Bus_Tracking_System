@@ -19,7 +19,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 
 const ROUTE_ID = args.routeId || 'QA-ROUTE-1';
 const MODE = args.mode || 'normal'; // 'normal', 'delay', 'breakdown', 'skip_stop'
-const SPEED_KMH = parseFloat(args.speed) || 25; // Tốc độ mô phỏng 25 km/h 
+const SPEED_KMH = parseFloat(args.speed) || 60; // Tốc độ mô phỏng mặc định 60 km/h (có thể tăng lên 400) 
 const EMIT_INTERVAL_MS = 3000; // Emit mỗi 3 giây 
 
 // URL máy chủ Socket.IO (lấy từ file .env, ví dụ http://localhost:4000)
