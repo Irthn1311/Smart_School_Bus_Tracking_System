@@ -12,9 +12,10 @@ CREATE DATABASE IF NOT EXISTS school_bus_system;
 USE school_bus_system;
 
 -- Drop existing tables if they exist (for clean initialization)
-DROP TABLE IF EXISTS temp_student_stop_mapping;
-DROP TABLE IF EXISTS HocSinh_DiemDung;
+-- Note: temp_student_stop_mapping is a TEMPORARY TABLE used only in seed scripts, not in schema
+-- IMPORTANT: Drop tables with foreign keys FIRST, then drop referenced tables
 DROP TABLE IF EXISTS student_stop_suggestions;
+DROP TABLE IF EXISTS HocSinh_DiemDung;  -- Drop before DiemDung (has FK to DiemDung)
 DROP TABLE IF EXISTS trip_stop_status;
 DROP TABLE IF EXISTS schedule_student_stops;
 DROP TABLE IF EXISTS TrangThaiHocSinh;
@@ -352,6 +353,7 @@ CREATE TABLE IF NOT EXISTS student_stop_suggestions (
     maTuyen INT NOT NULL,
     maDiemDung INT NOT NULL,
     maHocSinh INT NOT NULL,
+    khoangCachMet INT NULL COMMENT 'Khoảng cách đi bộ từ nhà học sinh đến điểm dừng (mét)',
     
     ngayTao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ngayCapNhat TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -375,37 +377,17 @@ CREATE TABLE IF NOT EXISTS student_stop_suggestions (
     INDEX idx_student_stop_suggestions_route (maTuyen),
     INDEX idx_student_stop_suggestions_stop (maDiemDung),
     INDEX idx_student_stop_suggestions_student (maHocSinh),
-    INDEX idx_student_stop_suggestions_route_stop (maTuyen, maDiemDung)
+    INDEX idx_student_stop_suggestions_route_stop (maTuyen, maDiemDung),
+    INDEX idx_khoangCachMet (khoangCachMet)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Add comment
 ALTER TABLE student_stop_suggestions COMMENT = 'Lưu mapping gợi ý học sinh - điểm dừng cho route (tự động tạo khi tạo route auto)';
 
 -- ===========================================================================
--- Bảng lưu mapping học sinh → điểm dừng độc lập (HocSinh_DiemDung)
--- Phục vụ cho hệ thống tối ưu hóa điểm dừng hai tầng
+-- NOTE: HocSinh_DiemDung table has been removed
+-- All student-stop mappings are now stored in student_stop_suggestions (route-specific)
 -- ===========================================================================
-CREATE TABLE IF NOT EXISTS HocSinh_DiemDung (
-    maHocSinh INT NOT NULL,
-    maDiemDung INT NOT NULL,
-    khoangCachMet INT COMMENT 'Khoảng cách đi bộ từ nhà đến điểm dừng (mét)',
-    ngayTao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    PRIMARY KEY (maHocSinh, maDiemDung),
-    
-    FOREIGN KEY (maHocSinh) REFERENCES HocSinh(maHocSinh) 
-        ON DELETE CASCADE,
-    FOREIGN KEY (maDiemDung) REFERENCES DiemDung(maDiem) 
-        ON DELETE CASCADE,
-    
-    -- Indexes
-    INDEX idx_maHocSinh (maHocSinh),
-    INDEX idx_maDiemDung (maDiemDung),
-    INDEX idx_khoangCach (khoangCachMet)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Add comment
-ALTER TABLE HocSinh_DiemDung COMMENT = 'Mapping học sinh → điểm dừng độc lập (tạo từ Greedy Maximum Coverage algorithm)';
 
 -- Display completion message
 SELECT 'Database initialization completed successfully!' as message;

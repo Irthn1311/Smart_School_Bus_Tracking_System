@@ -17,6 +17,7 @@ const StudentStopSuggestionModel = {
         sss.maTuyen,
         sss.maDiemDung,
         sss.maHocSinh,
+        sss.khoangCachMet,
         sss.ngayTao,
         sss.ngayCapNhat,
         h.hoTen as tenHocSinh,
@@ -64,7 +65,7 @@ const StudentStopSuggestionModel = {
 
   /**
    * Bulk insert suggestions
-   * @param {Array<{maTuyen: number, maDiemDung: number, maHocSinh: number}>} suggestions
+   * @param {Array<{maTuyen: number, maDiemDung: number, maHocSinh: number, khoangCachMet?: number}>} suggestions
    * @returns {Promise<number>} Số dòng đã insert
    */
   async bulkCreate(suggestions) {
@@ -72,17 +73,45 @@ const StudentStopSuggestionModel = {
       return 0;
     }
 
-    const values = suggestions.map(
-      (s) => `(${s.maTuyen}, ${s.maDiemDung}, ${s.maHocSinh})`
+    // 🔥 FIX: Loại bỏ duplicate trước khi insert (prevent duplicate trong cùng batch)
+    const uniqueSuggestions = [];
+    const seen = new Set();
+    for (const s of suggestions) {
+      const key = `${s.maTuyen}_${s.maDiemDung}_${s.maHocSinh}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueSuggestions.push(s);
+      } else {
+        console.log(`[StudentStopSuggestionModel] ⚠️ Duplicate in batch: Route ${s.maTuyen}, Stop ${s.maDiemDung}, Student ${s.maHocSinh} - skipping`);
+      }
+    }
+
+    if (uniqueSuggestions.length === 0) {
+      console.log(`[StudentStopSuggestionModel] No unique suggestions to insert after deduplication`);
+      return 0;
+    }
+
+    console.log(`[StudentStopSuggestionModel] Inserting ${uniqueSuggestions.length} unique suggestions (${suggestions.length - uniqueSuggestions.length} duplicates removed)`);
+
+    const values = uniqueSuggestions.map(
+      (s) => {
+        const khoangCachMet = s.khoangCachMet !== undefined && s.khoangCachMet !== null 
+          ? s.khoangCachMet 
+          : 'NULL';
+        return `(${s.maTuyen}, ${s.maDiemDung}, ${s.maHocSinh}, ${khoangCachMet})`;
+      }
     );
 
     const query = `
-      INSERT INTO student_stop_suggestions (maTuyen, maDiemDung, maHocSinh)
+      INSERT INTO student_stop_suggestions (maTuyen, maDiemDung, maHocSinh, khoangCachMet)
       VALUES ${values.join(", ")}
-      ON DUPLICATE KEY UPDATE ngayCapNhat = CURRENT_TIMESTAMP
+      ON DUPLICATE KEY UPDATE 
+        khoangCachMet = VALUES(khoangCachMet),
+        ngayCapNhat = CURRENT_TIMESTAMP
     `;
 
     const [result] = await pool.query(query);
+    console.log(`[StudentStopSuggestionModel] ✅ Inserted/updated ${result.affectedRows} suggestions`);
     return result.affectedRows;
   },
 

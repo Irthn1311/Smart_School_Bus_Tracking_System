@@ -112,8 +112,21 @@ class RouteFromOptimizationService {
     const routesToProcess = [...routesToCreate];
     
     // Xử lý từng route và tách nếu cần
+    // 🔥 THÊM GIỚI HẠN: Tránh vòng lặp vô hạn khi tách route
+    const MAX_SPLIT_DEPTH = 3; // Tối đa tách 3 lần
+    const routeSplitDepth = new Map(); // Track độ sâu tách của mỗi route
+    
     while (routesToProcess.length > 0) {
       const vrpRoute = routesToProcess.shift();
+      const routeKey = vrpRoute.routeId || `route_${finalRoutesToCreate.length + routesToProcess.length}`;
+      const currentDepth = routeSplitDepth.get(routeKey) || 0;
+      
+      // Nếu đã tách quá nhiều lần, giữ nguyên route và cảnh báo
+      if (currentDepth >= MAX_SPLIT_DEPTH) {
+        console.warn(`[RouteFromOptimization] ⚠️ Route ${routeKey} has been split ${currentDepth} times, keeping as is (may exceed max distance)`);
+        finalRoutesToCreate.push(vrpRoute);
+        continue;
+      }
       
       // Tính độ dài thực tế từ Maps API trước khi quyết định có tách hay không
       let actualDistance = vrpRoute.estimatedDistance || 0;
@@ -141,8 +154,11 @@ class RouteFromOptimizationService {
       }
       
       // Kiểm tra và tách route nếu quá dài (dựa trên độ dài thực tế từ Maps API)
-      if (maxRouteDistance && actualDistance > maxRouteDistance) {
-        console.log(`[RouteFromOptimization] ⚠️ Route actual distance (${actualDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km), splitting...`);
+      // 🔥 CHỈ TÁCH NẾU CÓ NHIỀU HƠN 1 NODE - nếu chỉ có 1 node mà vẫn vượt quá giới hạn, giữ nguyên
+      const nodeCount = vrpRoute.nodes ? this.deduplicateNodesByOriginalStop(vrpRoute.nodes).length : 0;
+      
+      if (maxRouteDistance && actualDistance > maxRouteDistance && nodeCount > 1) {
+        console.log(`[RouteFromOptimization] ⚠️ Route actual distance (${actualDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km), splitting... (depth: ${currentDepth}/${MAX_SPLIT_DEPTH})`);
         // Tách route thành nhiều routes nhỏ hơn
         const splitRoutes = await this.splitRouteIfTooLong({
           vrpRoute,
@@ -153,8 +169,18 @@ class RouteFromOptimizationService {
           routeIndex: finalRoutesToCreate.length + routesToProcess.length + 1,
         });
         
+        // Đánh dấu độ sâu tách cho các routes đã tách
+        splitRoutes.forEach((splitRoute, idx) => {
+          const splitRouteKey = splitRoute.routeId || `${routeKey}_split_${idx}`;
+          routeSplitDepth.set(splitRouteKey, currentDepth + 1);
+        });
+        
         // Thêm các routes đã tách vào queue để xử lý tiếp (kiểm tra lại độ dài)
         routesToProcess.unshift(...splitRoutes);
+      } else if (maxRouteDistance && actualDistance > maxRouteDistance && nodeCount === 1) {
+        // Nếu chỉ có 1 node mà vẫn vượt quá giới hạn, giữ nguyên và cảnh báo
+        console.warn(`[RouteFromOptimization] ⚠️ Route with single node exceeds max distance (${actualDistance.toFixed(2)}km > ${maxRouteDistance}km), keeping as is`);
+        finalRoutesToCreate.push(vrpRoute);
       } else {
         finalRoutesToCreate.push(vrpRoute);
       }
@@ -382,6 +408,7 @@ class RouteFromOptimizationService {
 
   /**
    * Tách route thành nhiều routes nhỏ hơn nếu vượt quá maxRouteDistance
+   * 🔥 CẢI THIỆN: Sử dụng ước tính nhanh hơn để tránh gọi Maps API quá nhiều lần
    * @param {Object} options - {vrpRoute, depot, maxRouteDistance, routeNamePrefix, createdRouteNames, routeIndex}
    * @returns {Promise<Array>} Array of routes
    */
@@ -394,6 +421,11 @@ class RouteFromOptimizationService {
 
     // Deduplicate virtual nodes
     nodes = this.deduplicateNodesByOriginalStop(nodes);
+    
+    // Nếu chỉ có 1 node, không thể tách
+    if (nodes.length <= 1) {
+      return [vrpRoute];
+    }
 
     // Tính độ dài tuyến hiện tại
     const routeDistance = vrpRoute.estimatedDistance || 0; // km
@@ -405,7 +437,7 @@ class RouteFromOptimizationService {
 
     console.log(`[RouteFromOptimization] ⚠️ Route ${routeIndex} distance (${routeDistance.toFixed(2)}km) exceeds max (${maxRouteDistance}km), splitting...`);
 
-    // Tách route thành nhiều routes nhỏ hơn
+    // 🔥 CẢI THIỆN: Sử dụng ước tính nhanh để tách route, chỉ tính chính xác khi cần
     // Sắp xếp nodes theo khoảng cách từ depot (xa nhất trước)
     const sortedNodes = [...nodes].sort((a, b) => {
       const distA = this.calculateDistanceFromDepot(depot, a);
@@ -416,57 +448,74 @@ class RouteFromOptimizationService {
     const splitRoutes = [];
     let currentRouteNodes = [];
     let splitRouteIndex = 1;
+    
+    // 🔥 Ước tính độ dài route: khoảng cách từ depot đến điểm xa nhất * 2 (đi và về)
+    // Cộng thêm khoảng cách giữa các nodes (ước tính đơn giản)
+    const estimateRouteDistance = (routeNodes) => {
+      if (routeNodes.length === 0) return 0;
+      if (routeNodes.length === 1) {
+        return this.calculateDistanceFromDepot(depot, routeNodes[0]) * 2;
+      }
+      
+      // Tìm điểm xa nhất
+      let maxDist = 0;
+      let totalInterNodeDistance = 0;
+      
+      for (let i = 0; i < routeNodes.length; i++) {
+        const dist = this.calculateDistanceFromDepot(depot, routeNodes[i]);
+        if (dist > maxDist) {
+          maxDist = dist;
+        }
+        
+        // Ước tính khoảng cách giữa các nodes (nếu có)
+        if (i > 0) {
+          const interDist = StopSuggestionService.calculateDistance(
+            routeNodes[i-1].viDo,
+            routeNodes[i-1].kinhDo,
+            routeNodes[i].viDo,
+            routeNodes[i].kinhDo
+          );
+          totalInterNodeDistance += interDist;
+        }
+      }
+      
+      // Ước tính: khoảng cách từ depot đến điểm xa nhất * 2 + khoảng cách giữa các nodes
+      return maxDist * 2 + totalInterNodeDistance * 0.8; // Hệ số 0.8 để bù cho đường cong
+    };
 
-    // Tính độ dài thực tế cho từng route nhỏ bằng cách tính polyline
+    // Tách route bằng cách thêm nodes vào route hiện tại cho đến khi ước tính vượt quá giới hạn
     for (let i = 0; i < sortedNodes.length; i++) {
       const node = sortedNodes[i];
       const testRouteNodes = [...currentRouteNodes, node];
       
-      // Tính độ dài thực tế của route nếu thêm node này
-      let testRouteDistance = 0;
-      if (testRouteNodes.length > 0) {
-        try {
-          // Tạo test route để tính độ dài thực tế
-          const testRoute = {
-            ...vrpRoute,
-            nodes: testRouteNodes,
-          };
-          
-          const { distance } = await this.computePolylineForRoute({
-            route: testRoute,
-            depot,
-            routeIndex: `${routeIndex}_test_${splitRouteIndex}`,
-          });
-          
-          testRouteDistance = distance || 0;
-        } catch (error) {
-          // Nếu không tính được, dùng ước tính đơn giản
-          const farthestNode = testRouteNodes[0];
-          const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
-          testRouteDistance = farthestDist * 2; // Đi và về từ depot
-        }
-      }
-
-      // Nếu thêm node này sẽ vượt quá giới hạn và đã có nodes trong route hiện tại
-      if (testRouteDistance > maxRouteDistance && currentRouteNodes.length > 0) {
-        // Tính độ dài thực tế của route hiện tại
-        let currentRouteDistance = 0;
-        try {
-          const currentRoute = {
-            ...vrpRoute,
-            nodes: currentRouteNodes,
-          };
-          const { distance } = await this.computePolylineForRoute({
-            route: currentRoute,
-            depot,
-            routeIndex: `${routeIndex}_${splitRouteIndex}`,
-          });
-          currentRouteDistance = distance || 0;
-        } catch (error) {
-          // Fallback to estimated distance
-          const farthestNode = currentRouteNodes[0];
-          const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
-          currentRouteDistance = farthestDist * 2;
+      // Ước tính độ dài route nếu thêm node này
+      const estimatedDistance = estimateRouteDistance(testRouteNodes);
+      
+      // Nếu ước tính vượt quá giới hạn và đã có nodes trong route hiện tại
+      // (cho phép vượt quá một chút để tránh tách quá nhỏ)
+      if (estimatedDistance > maxRouteDistance * 1.1 && currentRouteNodes.length > 0) {
+        // Tính độ dài thực tế của route hiện tại (chỉ khi cần)
+        let currentRouteDistance = estimateRouteDistance(currentRouteNodes);
+        
+        // Nếu route hiện tại có nhiều nodes, tính chính xác hơn
+        if (currentRouteNodes.length > 3) {
+          try {
+            const currentRoute = {
+              ...vrpRoute,
+              nodes: currentRouteNodes,
+            };
+            const { distance } = await this.computePolylineForRoute({
+              route: currentRoute,
+              depot,
+              routeIndex: `${routeIndex}_${splitRouteIndex}`,
+            });
+            if (distance > 0) {
+              currentRouteDistance = distance;
+            }
+          } catch (error) {
+            // Giữ nguyên ước tính nếu không tính được
+            console.warn(`[RouteFromOptimization] Could not compute exact distance for split route, using estimate`);
+          }
         }
         
         // Tạo route từ các nodes hiện tại
@@ -488,24 +537,27 @@ class RouteFromOptimizationService {
 
     // Thêm route cuối cùng nếu còn nodes
     if (currentRouteNodes.length > 0) {
-      // Tính độ dài thực tế của route cuối cùng
-      let finalRouteDistance = 0;
-      try {
-        const finalRoute = {
-          ...vrpRoute,
-          nodes: currentRouteNodes,
-        };
-        const { distance } = await this.computePolylineForRoute({
-          route: finalRoute,
-          depot,
-          routeIndex: `${routeIndex}_${splitRouteIndex}`,
-        });
-        finalRouteDistance = distance || 0;
-      } catch (error) {
-        // Fallback to estimated distance
-        const farthestNode = currentRouteNodes[0];
-        const farthestDist = this.calculateDistanceFromDepot(depot, farthestNode);
-        finalRouteDistance = farthestDist * 2;
+      // Tính độ dài thực tế của route cuối cùng (chỉ khi có nhiều nodes)
+      let finalRouteDistance = estimateRouteDistance(currentRouteNodes);
+      
+      if (currentRouteNodes.length > 3) {
+        try {
+          const finalRoute = {
+            ...vrpRoute,
+            nodes: currentRouteNodes,
+          };
+          const { distance } = await this.computePolylineForRoute({
+            route: finalRoute,
+            depot,
+            routeIndex: `${routeIndex}_${splitRouteIndex}`,
+          });
+          if (distance > 0) {
+            finalRouteDistance = distance;
+          }
+        } catch (error) {
+          // Giữ nguyên ước tính nếu không tính được
+          console.warn(`[RouteFromOptimization] Could not compute exact distance for final split route, using estimate`);
+        }
       }
       
       splitRoutes.push({
@@ -517,6 +569,13 @@ class RouteFromOptimizationService {
     }
 
     console.log(`[RouteFromOptimization] ✅ Split route ${routeIndex} into ${splitRoutes.length} routes`);
+    
+    // 🔥 VERIFY: Đảm bảo các routes đã tách không quá dài
+    for (const splitRoute of splitRoutes) {
+      if (splitRoute.estimatedDistance > maxRouteDistance * 1.2) {
+        console.warn(`[RouteFromOptimization] ⚠️ Split route ${splitRoute.routeId} still exceeds max distance (${splitRoute.estimatedDistance.toFixed(2)}km > ${maxRouteDistance}km)`);
+      }
+    }
     
     return splitRoutes;
   }
@@ -832,11 +891,33 @@ class RouteFromOptimizationService {
       const RouteService = (await import("./RouteService.js")).default;
       const routeStops = await RouteStopModel.getByRouteId(routeId);
       if (routeStops.length > 0) {
-        const assignedCount = await RouteService.assignStudentsToStops(routeId, routeStops);
-        console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to route ${routeId} stops`);
+        console.log(`[RouteFromOptimization] Assigning students to ${routeStops.length} stops for route ${routeId}...`);
+        
+        // Verify stops có tọa độ hợp lệ
+        const validStops = routeStops.filter(s => s.viDo && s.kinhDo && !isNaN(s.viDo) && !isNaN(s.kinhDo));
+        if (validStops.length !== routeStops.length) {
+          console.warn(`[RouteFromOptimization] ⚠️ Some stops missing coordinates: ${routeStops.length - validStops.length} stops without valid coordinates`);
+        }
+        
+        if (validStops.length > 0) {
+          const assignedCount = await RouteService.assignStudentsToStops(routeId, validStops);
+          console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to route ${routeId} stops (${validStops.length} valid stops)`);
+          
+          if (assignedCount === 0) {
+            console.warn(`[RouteFromOptimization] ⚠️ No students assigned to route ${routeId}. Possible reasons:`);
+            console.warn(`[RouteFromOptimization]   1. No students within 2km of any stop`);
+            console.warn(`[RouteFromOptimization]   2. Students don't have valid coordinates`);
+            console.warn(`[RouteFromOptimization]   3. Students are not active (trangThai = false)`);
+          }
+        } else {
+          console.warn(`[RouteFromOptimization] ⚠️ No valid stops with coordinates for route ${routeId}, skipping student assignment`);
+        }
+      } else {
+        console.warn(`[RouteFromOptimization] ⚠️ Route ${routeId} has no stops, skipping student assignment`);
       }
     } catch (assignError) {
-      console.warn(`[RouteFromOptimization] ⚠️ Failed to auto-assign students to route ${routeId}:`, assignError);
+      console.error(`[RouteFromOptimization] ❌ Failed to auto-assign students to route ${routeId}:`, assignError);
+      console.error(`[RouteFromOptimization] Error stack:`, assignError.stack);
       // Không throw error - route đã được tạo thành công
     }
 
@@ -1099,11 +1180,33 @@ class RouteFromOptimizationService {
       const RouteService = (await import("./RouteService.js")).default;
       const routeStops = await RouteStopModel.getByRouteId(routeId);
       if (routeStops.length > 0) {
-        const assignedCount = await RouteService.assignStudentsToStops(routeId, routeStops);
-        console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to return route ${routeId} stops`);
+        console.log(`[RouteFromOptimization] Assigning students to ${routeStops.length} stops for return route ${routeId}...`);
+        
+        // Verify stops có tọa độ hợp lệ
+        const validStops = routeStops.filter(s => s.viDo && s.kinhDo && !isNaN(s.viDo) && !isNaN(s.kinhDo));
+        if (validStops.length !== routeStops.length) {
+          console.warn(`[RouteFromOptimization] ⚠️ Some stops missing coordinates: ${routeStops.length - validStops.length} stops without valid coordinates`);
+        }
+        
+        if (validStops.length > 0) {
+          const assignedCount = await RouteService.assignStudentsToStops(routeId, validStops);
+          console.log(`[RouteFromOptimization] ✅ Auto-assigned ${assignedCount} students to return route ${routeId} stops (${validStops.length} valid stops)`);
+          
+          if (assignedCount === 0) {
+            console.warn(`[RouteFromOptimization] ⚠️ No students assigned to return route ${routeId}. Possible reasons:`);
+            console.warn(`[RouteFromOptimization]   1. No students within 2km of any stop`);
+            console.warn(`[RouteFromOptimization]   2. Students don't have valid coordinates`);
+            console.warn(`[RouteFromOptimization]   3. Students are not active (trangThai = false)`);
+          }
+        } else {
+          console.warn(`[RouteFromOptimization] ⚠️ No valid stops with coordinates for return route ${routeId}, skipping student assignment`);
+        }
+      } else {
+        console.warn(`[RouteFromOptimization] ⚠️ Return route ${routeId} has no stops, skipping student assignment`);
       }
     } catch (assignError) {
-      console.warn(`[RouteFromOptimization] ⚠️ Failed to auto-assign students to return route ${routeId}:`, assignError);
+      console.error(`[RouteFromOptimization] ❌ Failed to auto-assign students to return route ${routeId}:`, assignError);
+      console.error(`[RouteFromOptimization] Error stack:`, assignError.stack);
       // Không throw error - route đã được tạo thành công
     }
 

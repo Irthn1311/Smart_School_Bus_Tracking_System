@@ -223,6 +223,7 @@ class ValidationMiddleware {
       ).optional(),
       routeType: Joi.string().valid('di', 've').optional(),
       createReturnRoute: Joi.boolean().optional(),
+      skipAutoAssign: Joi.boolean().optional(), // 🔥 Cho phép skip tự động gán học sinh khi frontend sẽ gán thủ công
       stops: Joi.array().items(
         Joi.object({
           stop_id: Joi.number().integer().positive().allow(null).optional(),

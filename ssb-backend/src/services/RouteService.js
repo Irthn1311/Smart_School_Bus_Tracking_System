@@ -175,15 +175,20 @@ class RouteService {
       }
       
       // 🔥 Tự động gán học sinh vào student_stop_suggestions sau khi thêm stops
-      try {
-        const routeStops = await RouteStopModel.getByRouteId(routeId);
-        if (routeStops.length > 0) {
-          const assignedCount = await this.assignStudentsToStops(routeId, routeStops);
-          console.log(`[RouteService] ✅ Auto-assigned ${assignedCount} students to route ${routeId} stops`);
+      // CHỈ tự động gán nếu không có flag skipAutoAssign (frontend sẽ tự gán học sinh thủ công)
+      if (!payload.skipAutoAssign) {
+        try {
+          const routeStops = await RouteStopModel.getByRouteId(routeId);
+          if (routeStops.length > 0) {
+            const assignedCount = await this.assignStudentsToStops(routeId, routeStops);
+            console.log(`[RouteService] ✅ Auto-assigned ${assignedCount} students to route ${routeId} stops`);
+          }
+        } catch (assignError) {
+          console.warn(`[RouteService] ⚠️ Failed to auto-assign students to route ${routeId}:`, assignError);
+          // Không throw error - route đã được tạo thành công
         }
-      } catch (assignError) {
-        console.warn(`[RouteService] ⚠️ Failed to auto-assign students to route ${routeId}:`, assignError);
-        // Không throw error - route đã được tạo thành công
+      } else {
+        console.log(`[RouteService] ⏭️ Skipping auto-assign students (skipAutoAssign=true) - frontend will assign manually`);
       }
       
       // Rebuild polyline cho tuyến đi
@@ -256,15 +261,20 @@ class RouteService {
         }
         
         // 🔥 Tự động gán học sinh vào student_stop_suggestions cho tuyến về
-        try {
-          const returnRouteStops = await RouteStopModel.getByRouteId(returnRouteId);
-          if (returnRouteStops.length > 0) {
-            const assignedCount = await this.assignStudentsToStops(returnRouteId, returnRouteStops);
-            console.log(`[RouteService] ✅ Auto-assigned ${assignedCount} students to return route ${returnRouteId} stops`);
+        // CHỈ tự động gán nếu không có flag skipAutoAssign (frontend sẽ tự gán học sinh thủ công)
+        if (!payload.skipAutoAssign) {
+          try {
+            const returnRouteStops = await RouteStopModel.getByRouteId(returnRouteId);
+            if (returnRouteStops.length > 0) {
+              const assignedCount = await this.assignStudentsToStops(returnRouteId, returnRouteStops);
+              console.log(`[RouteService] ✅ Auto-assigned ${assignedCount} students to return route ${returnRouteId} stops`);
+            }
+          } catch (assignError) {
+            console.warn(`[RouteService] ⚠️ Failed to auto-assign students to return route ${returnRouteId}:`, assignError);
+            // Không throw error - route đã được tạo thành công
           }
-        } catch (assignError) {
-          console.warn(`[RouteService] ⚠️ Failed to auto-assign students to return route ${returnRouteId}:`, assignError);
-          // Không throw error - route đã được tạo thành công
+        } else {
+          console.log(`[RouteService] ⏭️ Skipping auto-assign students for return route (skipAutoAssign=true) - frontend will assign manually`);
         }
         
         // Rebuild polyline cho tuyến về
@@ -781,7 +791,57 @@ class RouteService {
   }
 
   /**
+   * Kiểm tra xem một điểm dừng có phải là trường Đại học Sài Gòn không
+   * @param {Object} stop - Điểm dừng {maDiem, tenDiem, viDo, kinhDo, sequence}
+   * @param {Array} routeStops - Toàn bộ danh sách stops của route (để kiểm tra sequence cuối)
+   * @returns {boolean} True nếu là trường học
+   */
+  static isSchoolStop(stop, routeStops = []) {
+    if (!stop) return false;
+    
+    // Tọa độ trường Đại học Sài Gòn (cho phép sai số 0.001 độ ~ 100m)
+    const SCHOOL_LAT = 10.760064662799088;
+    const SCHOOL_LNG = 106.6822422067464;
+    const TOLERANCE = 0.001; // ~100m
+    
+    // Kiểm tra theo tọa độ
+    if (stop.viDo && stop.kinhDo) {
+      const latDiff = Math.abs(parseFloat(stop.viDo) - SCHOOL_LAT);
+      const lngDiff = Math.abs(parseFloat(stop.kinhDo) - SCHOOL_LNG);
+      
+      if (latDiff <= TOLERANCE && lngDiff <= TOLERANCE) {
+        return true;
+      }
+    }
+    
+    // Kiểm tra theo tên điểm dừng
+    const stopName = (stop.tenDiem || '').toLowerCase();
+    const schoolKeywords = ['đại học sài gòn', 'sgu', 'trường đại học sài gòn', 'university'];
+    if (schoolKeywords.some(keyword => stopName.includes(keyword))) {
+      return true;
+    }
+    
+    // Kiểm tra nếu là điểm cuối cùng của route (sequence lớn nhất)
+    if (routeStops.length > 0 && stop.sequence !== undefined) {
+      const maxSequence = Math.max(...routeStops.map(s => s.sequence || 0));
+      if (stop.sequence === maxSequence) {
+        // Nếu là điểm cuối và tọa độ gần trường, coi là trường học
+        if (stop.viDo && stop.kinhDo) {
+          const latDiff = Math.abs(parseFloat(stop.viDo) - SCHOOL_LAT);
+          const lngDiff = Math.abs(parseFloat(stop.kinhDo) - SCHOOL_LNG);
+          if (latDiff <= TOLERANCE * 2 && lngDiff <= TOLERANCE * 2) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * Tự động gán học sinh vào student_stop_suggestions dựa trên khoảng cách
+   * 🔥 KHÔNG gán học sinh cho điểm dừng là trường Đại học Sài Gòn
    * @param {number} routeId - Mã tuyến đường
    * @param {Array} routeStops - Danh sách stops của route (từ RouteStopModel.getByRouteId)
    * @returns {Promise<number>} Số lượng suggestions đã tạo
@@ -813,8 +873,10 @@ class RouteService {
         return 0;
       }
 
-      // Maximum distance from stop to student (1km - giảm từ 2km để tránh gán quá nhiều)
-      const MAX_DISTANCE_KM = 1.0;
+      // Maximum distance from stop to student (tăng lên 2km để đảm bảo gán được học sinh)
+      // Lưu ý: Trong optimization, học sinh đã được gán vào stops dựa trên R_walk (thường 300-500m)
+      // Nhưng khi tạo route, có thể cần tìm lại học sinh với bán kính lớn hơn một chút
+      const MAX_DISTANCE_KM = 2.0; // Tăng từ 1km lên 2km để đảm bảo gán được học sinh
       // Maximum students per stop (giống BusStopOptimizationService S_max = 25)
       const MAX_STUDENTS_PER_STOP = 25;
 
@@ -825,6 +887,18 @@ class RouteService {
       for (const stop of routeStops) {
         if (!stop.viDo || !stop.kinhDo || isNaN(stop.viDo) || isNaN(stop.kinhDo)) {
           console.warn(`[RouteService] assignStudentsToStops: Stop ${stop.maDiem} has invalid coordinates, skipping`);
+          continue;
+        }
+        
+        // 🔥 BỎ QUA điểm dừng là trường Đại học Sài Gòn (không đón học sinh tại trường)
+        if (this.isSchoolStop(stop, routeStops)) {
+          console.log(`[RouteService] assignStudentsToStops: Skipping school stop ${stop.maDiem} (${stop.tenDiem}) - không đón học sinh tại trường`);
+          continue;
+        }
+        
+        // 🔥 BỎ QUA điểm bắt đầu (sequence = 1) - không đón học sinh tại điểm bắt đầu
+        if (stop.sequence === 1 || stop.sequence === '1') {
+          console.log(`[RouteService] assignStudentsToStops: Skipping origin stop (sequence=1) ${stop.maDiem} (${stop.tenDiem}) - không đón học sinh tại điểm bắt đầu`);
           continue;
         }
 
@@ -858,10 +932,13 @@ class RouteService {
           // Nhưng tránh duplicate exact (maTuyen, maHocSinh, maDiemDung)
           const suggestionKey = `${routeId}_${student.maHocSinh}_${stop.maDiem}`;
           if (!assignedStudentIds.has(suggestionKey)) {
+            // Tính khoảng cách mét (distance đang là km)
+            const khoangCachMet = Math.round(distance * 1000);
             suggestions.push({
               maTuyen: routeId,
               maDiemDung: stop.maDiem,
               maHocSinh: student.maHocSinh,
+              khoangCachMet: khoangCachMet,
             });
             assignedStudentIds.add(suggestionKey);
           }
@@ -880,112 +957,6 @@ class RouteService {
       const affectedRows = await StudentStopSuggestionModel.bulkCreate(suggestions);
 
       console.log(`[RouteService] assignStudentsToStops: ✅ Created ${affectedRows} suggestions for route ${routeId} (${suggestions.length} unique suggestions)`);
-
-      // 🔥 Lưu vào HocSinh_DiemDung (mapping độc lập) - mỗi học sinh chỉ gán vào 1 điểm dừng gần nhất
-      try {
-        // Lấy assignments hiện tại từ HocSinh_DiemDung
-        const BusStopOptimizationService = (await import("./BusStopOptimizationService.js")).default;
-        const existingAssignments = await BusStopOptimizationService.getAssignments();
-        const existingAssignmentsMap = new Map();
-        existingAssignments.forEach(a => {
-          existingAssignmentsMap.set(a.maHocSinh, {
-            maDiemDung: a.maDiemDung,
-            khoangCachMet: a.khoangCachMet || 0,
-          });
-        });
-
-        // Group suggestions theo học sinh để tìm điểm dừng gần nhất cho mỗi học sinh
-        const suggestionsByStudent = new Map();
-        for (const suggestion of suggestions) {
-          const { maHocSinh, maDiemDung } = suggestion;
-          
-          if (!suggestionsByStudent.has(maHocSinh)) {
-            suggestionsByStudent.set(maHocSinh, []);
-          }
-          suggestionsByStudent.get(maHocSinh).push(suggestion);
-        }
-
-        // Tạo assignments mới cho HocSinh_DiemDung - mỗi học sinh chỉ gán vào điểm dừng gần nhất
-        const hocSinhDiemDungAssignments = [];
-
-        for (const [maHocSinh, studentSuggestions] of suggestionsByStudent.entries()) {
-          const student = studentsWithCoords.find(s => s.maHocSinh === maHocSinh);
-          if (!student) continue;
-
-          // Tìm điểm dừng gần nhất cho học sinh này
-          let nearestSuggestion = null;
-          let minDistanceMeters = Infinity;
-
-          for (const suggestion of studentSuggestions) {
-            const stop = routeStops.find(s => s.maDiem === suggestion.maDiemDung);
-            if (!stop || !stop.viDo || !stop.kinhDo) continue;
-
-            // Tính khoảng cách (mét)
-            const distanceKm = calculateDistance(
-              student.viDo,
-              student.kinhDo,
-              stop.viDo,
-              stop.kinhDo
-            );
-            const distanceMeters = Math.round(distanceKm * 1000);
-
-            if (distanceMeters < minDistanceMeters) {
-              minDistanceMeters = distanceMeters;
-              nearestSuggestion = {
-                maHocSinh,
-                maDiemDung: suggestion.maDiemDung,
-                khoangCachMet: distanceMeters,
-              };
-            }
-          }
-
-          if (!nearestSuggestion) continue;
-
-          // Kiểm tra xem học sinh đã có assignment trong HocSinh_DiemDung chưa
-          const existingAssignment = existingAssignmentsMap.get(maHocSinh);
-          
-          if (!existingAssignment) {
-            // Học sinh chưa có assignment → lưu vào
-            hocSinhDiemDungAssignments.push(nearestSuggestion);
-          } else {
-            // Học sinh đã có assignment → chỉ update nếu khoảng cách mới gần hơn
-            if (minDistanceMeters < existingAssignment.khoangCachMet) {
-              hocSinhDiemDungAssignments.push(nearestSuggestion);
-            }
-          }
-        }
-
-        // Lưu vào HocSinh_DiemDung
-        // Lưu ý: Mỗi học sinh chỉ nên có 1 assignment trong HocSinh_DiemDung (điểm dừng gần nhất)
-        // Nếu học sinh đã có assignment với điểm dừng khác, cần xóa assignment cũ trước
-        if (hocSinhDiemDungAssignments.length > 0) {
-          const studentIds = hocSinhDiemDungAssignments.map(a => a.maHocSinh);
-          
-          // Xóa assignments cũ của các học sinh này (nếu có)
-          await pool.query(
-            `DELETE FROM HocSinh_DiemDung WHERE maHocSinh IN (${studentIds.map(() => "?").join(",")})`,
-            studentIds
-          );
-
-          // Insert assignments mới
-          const values = hocSinhDiemDungAssignments.map(a => 
-            `(${a.maHocSinh}, ${a.maDiemDung}, ${a.khoangCachMet})`
-          );
-          
-          const query = `
-            INSERT INTO HocSinh_DiemDung (maHocSinh, maDiemDung, khoangCachMet)
-            VALUES ${values.join(", ")}
-          `;
-
-          const [result] = await pool.query(query);
-          console.log(`[RouteService] assignStudentsToStops: ✅ Saved ${result.affectedRows} assignments to HocSinh_DiemDung (${hocSinhDiemDungAssignments.length} students)`);
-        } else {
-          console.log(`[RouteService] assignStudentsToStops: No new assignments for HocSinh_DiemDung (all students already have closer assignments)`);
-        }
-      } catch (hocSinhDiemDungError) {
-        console.warn(`[RouteService] assignStudentsToStops: ⚠️ Failed to save to HocSinh_DiemDung:`, hocSinhDiemDungError);
-        // Không throw error - suggestions đã được lưu thành công
-      }
 
       return affectedRows;
     } catch (error) {
