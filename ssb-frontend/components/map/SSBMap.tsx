@@ -67,7 +67,7 @@ interface SSBMapProps {
 
 function SSBMap({
   center = { lat: 10.760064662799088, lng: 106.6822422067464 },
-  zoom = 13,
+  zoom = 18, // 🔥 Tăng zoom mặc định lên 18 để nhìn rõ hơn
   polyline,
   routes = [],
   stops = [],
@@ -344,9 +344,7 @@ function SSBMap({
           !destination ||
           destination.includes("NaN")
         ) {
-          console.error(
-            "[SSBMap] Invalid coordinates for directions request"
-          );
+          console.error("[SSBMap] Invalid coordinates for directions request");
           setIsFetchingDirections(false);
           return;
         }

@@ -173,7 +173,7 @@ export function MapView({
           <SSBMap
             height={height}
             center={center}
-            zoom={13}
+            zoom={18}
             buses={throttledBuses}
             stops={stopMarkers}
             routes={routes.map((r) => ({

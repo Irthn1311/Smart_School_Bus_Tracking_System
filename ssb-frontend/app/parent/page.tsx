@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -145,6 +145,10 @@ export default function ParentDashboard() {
         };
       });
       setLastUpdate(Date.now());
+
+      // 🔥 FIX: Loại bỏ logic fetch currentStopIndex từ busPosition update
+      // Vì đã có periodic fetch (3s) và socket event (real-time) để cập nhật currentStopIndex
+      // Fetch từ busPosition update có thể gây race condition và làm chậm cập nhật
     } else {
       console.warn(
         "[Parent] No valid busPosition yet, keeping default location"
@@ -152,7 +156,13 @@ export default function ParentDashboard() {
     }
     // 🔥 FIX: Chỉ depend vào giá trị cụ thể, không phải object reference
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busPosition?.lat, busPosition?.lng, busPosition?.heading, tripStatus]);
+  }, [
+    busPosition?.lat,
+    busPosition?.lng,
+    busPosition?.heading,
+    tripStatus,
+    selectedTripId,
+  ]);
 
   // Day 4: show alerts for approach_stop & delay_alert
   useEffect(() => {
@@ -199,29 +209,42 @@ export default function ParentDashboard() {
 
     const description = `Xe đang trễ khoảng ${delayMinutes} phút so với dự kiến`;
 
+    // 🔥 FIX: Di chuyển toast ra ngoài setBanner để tránh lỗi React
+    const prevBanner = prevBannerRef.current;
+    const shouldShowToast = !prevBanner || prevBanner.type !== "warning";
+
     setBanner((prev) => {
       const isSameWarning =
         prev && prev.type === "warning" && prev.description === description;
-
-      if (!prev || prev.type !== "warning") {
-        toast({
-          title: "⚠️ Xe buýt đang trễ",
-          description,
-          variant: "destructive",
-        });
-      }
 
       if (isSameWarning) {
         return prev;
       }
 
       console.log(`[Parent] Updated delay banner: ${delayMinutes} phút`);
-      return {
-        type: "warning",
+      const newBanner = {
+        type: "warning" as const,
         title: "⚠️ Xe buýt đang trễ",
         description,
       };
+
+      // Update ref for next comparison
+      prevBannerRef.current = newBanner;
+
+      return newBanner;
     });
+
+    // Show toast notification outside of setState
+    if (shouldShowToast) {
+      // Use setTimeout to defer toast call to next tick to avoid calling during render
+      setTimeout(() => {
+        toast({
+          title: "⚠️ Xe buýt đang trễ",
+          description,
+          variant: "destructive",
+        });
+      }, 0);
+    }
   }, [delayAlert, toast]);
 
   // M5: Listen for realtime notifications from WebSocket
@@ -580,8 +603,9 @@ export default function ParentDashboard() {
               "[Parent] Trip started, reloading trip detail for driver info..."
             );
             const tripDetailRes = await apiClient.getTripById(data.maChuyen);
-            const tripDetail: any =
+            const tripDetailData: any =
               (tripDetailRes as any)?.data || tripDetailRes;
+            const tripDetail = tripDetailData?.data || tripDetailData;
 
             // Update driver info
             let driverName = "Chưa phân công";
@@ -620,15 +644,52 @@ export default function ParentDashboard() {
       }
 
       // Update current stop index if provided
+      // 🔥 FIX: Clear dynamicDirections ngay và reset debounce timer khi currentStopIndex thay đổi từ socket event
+      // Để đảm bảo tuyến đường được cập nhật ngay lập tức (giống chuyến đi)
       if (typeof data.currentStop === "number") {
-        setCurrentStopIndex(data.currentStop);
-        console.log("[Parent] Updated currentStopIndex:", data.currentStop);
+        setCurrentStopIndex((prev) => {
+          if (prev !== data.currentStop) {
+            console.log(
+              "[Parent] ✅ Updated currentStopIndex from tripStatusUpdate:",
+              prev,
+              "→",
+              data.currentStop,
+              "(tripId:",
+              data.tripId || data.maChuyen,
+              ")"
+            );
+            // 🔥 FIX: Clear dynamicDirections ngay lập tức để đảm bảo tuyến đường mới được fetch
+            setDynamicDirections(null);
+            // Reset debounce timer để cho phép fetch tuyến đường ngay lập tức
+            (window as any).__lastParentDirectionsFetch = 0;
+            // Reset last currentStopIndex để trigger clear dynamicDirections trong useEffect
+            (window as any).__lastParentCurrentStopIndex = prev;
+            return data.currentStop;
+          }
+          return prev;
+        });
       } else if (typeof data.diemHienTai === "number") {
-        setCurrentStopIndex(data.diemHienTai);
-        console.log(
-          "[Parent] Updated currentStopIndex from diemHienTai:",
-          data.diemHienTai
-        );
+        setCurrentStopIndex((prev) => {
+          if (prev !== data.diemHienTai) {
+            console.log(
+              "[Parent] ✅ Updated currentStopIndex from diemHienTai (tripStatusUpdate):",
+              prev,
+              "→",
+              data.diemHienTai,
+              "(tripId:",
+              data.tripId || data.maChuyen,
+              ")"
+            );
+            // 🔥 FIX: Clear dynamicDirections ngay lập tức để đảm bảo tuyến đường mới được fetch
+            setDynamicDirections(null);
+            // Reset debounce timer để cho phép fetch tuyến đường ngay lập tức
+            (window as any).__lastParentDirectionsFetch = 0;
+            // Reset last currentStopIndex để trigger clear dynamicDirections trong useEffect
+            (window as any).__lastParentCurrentStopIndex = prev;
+            return data.diemHienTai;
+          }
+          return prev;
+        });
       }
     };
 
@@ -757,26 +818,232 @@ export default function ParentDashboard() {
 
   // Note: Removed initial fetching of students/routes to avoid 401/404 when not needed.
 
-  // 🔥 NEW: Fetch dynamic directions from bus position to next stop
+  // 🔥 NEW: Fetch trip detail when selectedTripId changes to initialize currentStopIndex and tripStatus
   useEffect(() => {
-    console.log("[Parent] Dynamic directions useEffect triggered:", {
+    if (!selectedTripId) {
+      return;
+    }
+
+    // Fetch trip detail immediately when selectedTripId changes
+    async function fetchTripDetail() {
+      if (!selectedTripId) {
+        return;
+      }
+      try {
+        console.log(
+          "[Parent] Fetching trip detail for initialization:",
+          selectedTripId
+        );
+        const tripRes = await apiClient.getTripById(selectedTripId);
+        console.log("[Parent] 🔍 Raw API response:", tripRes);
+        const tripData: any = (tripRes as any).data || tripRes;
+        console.log("[Parent] 🔍 Parsed tripData:", tripData);
+        const tripDetail = tripData?.data || tripData;
+        console.log("[Parent] 🔍 Parsed tripDetail:", tripDetail);
+
+        if (tripDetail) {
+          // 🔥 FIX: Access trip object from response structure
+          // Backend returns: { success: true, data: { trip: {...}, schedule: {...}, ... } }
+          const trip = tripDetail.trip || tripDetail;
+          console.log("[Parent] 🔍 Extracted trip object:", trip);
+          console.log("[Parent] 🔍 trip.currentStop:", trip?.currentStop);
+          console.log("[Parent] 🔍 trip.diemHienTai:", trip?.diemHienTai);
+
+          // Update trip status
+          if (trip?.trangThai || tripDetail?.trangThai || tripDetail?.status) {
+            const status =
+              trip?.trangThai || tripDetail.trangThai || tripDetail.status;
+            setTripStatus(status);
+            console.log("[Parent] ✅ Initialized tripStatus:", status);
+          }
+
+          // Update current stop index from trip data
+          // 🔥 FIX: Convert sequence number (1-based) to array index (0-based) ngay khi load từ database
+          // Giống hệt driver page để đảm bảo consistency
+          const dbCurrentStopSequence = trip?.currentStop || trip?.diemHienTai;
+
+          if (
+            typeof dbCurrentStopSequence === "number" &&
+            dbCurrentStopSequence > 0
+          ) {
+            // 🔥 FIX: Cần đợi stops array được load để convert đúng
+            // Nếu stops chưa load, sẽ convert lại trong useEffect khi stops thay đổi
+            // Tạm thời lưu sequence number, sẽ convert trong useEffect
+            setCurrentStopIndex((prev) => {
+              if (prev !== dbCurrentStopSequence) {
+                console.log(
+                  "[Parent] ✅ Initialized currentStopIndex (sequence) from database:",
+                  prev,
+                  "→",
+                  dbCurrentStopSequence
+                );
+                // Reset debounce timer để cho phép fetch tuyến đường ngay lập tức
+                (window as any).__lastParentDirectionsFetch = 0;
+                // Reset last currentStopIndex để trigger clear dynamicDirections trong useEffect
+                (window as any).__lastParentCurrentStopIndex = prev;
+                return dbCurrentStopSequence;
+              }
+              return prev;
+            });
+          } else {
+            console.warn(
+              "[Parent] ⚠️ No currentStop or diemHienTai in trip detail:",
+              { trip, tripDetail }
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "[Parent] Failed to fetch trip detail for initialization:",
+          error
+        );
+      }
+    }
+
+    fetchTripDetail();
+  }, [selectedTripId]);
+
+  // 🔥 NEW: Periodically fetch trip detail to update currentStopIndex when trip is running
+  useEffect(() => {
+    if (!selectedTripId || tripStatus !== "dang_chay") {
+      return;
+    }
+
+    // 🔥 FIX: Fetch trip detail every 3 seconds (giảm từ 10s) để cập nhật currentStopIndex nhanh hơn
+    const interval = setInterval(async () => {
+      try {
+        const tripRes = await apiClient.getTripById(selectedTripId);
+        const tripData: any = (tripRes as any).data || tripRes;
+        const tripDetail = tripData?.data || tripData;
+
+        if (tripDetail) {
+          // 🔥 FIX: Access trip object from response structure
+          const trip = tripDetail.trip || tripDetail;
+
+          // Update current stop index from trip data
+          // 🔥 FIX: Reset debounce timer khi currentStopIndex thay đổi từ periodic fetch
+          // 🔥 QUAN TRỌNG: Luôn ưu tiên diemHienTai từ database để đảm bảo cập nhật đúng
+          const dbCurrentStopSequence = trip?.currentStop || trip?.diemHienTai;
+
+          if (
+            typeof dbCurrentStopSequence === "number" &&
+            dbCurrentStopSequence > 0
+          ) {
+            setCurrentStopIndex((prev) => {
+              if (prev !== dbCurrentStopSequence) {
+                console.log(
+                  "[Parent] ✅ Updated currentStopIndex from periodic fetch (diemHienTai):",
+                  prev,
+                  "→",
+                  dbCurrentStopSequence,
+                  "(tripId:",
+                  selectedTripId,
+                  ")"
+                );
+                // 🔥 FIX: Clear dynamicDirections ngay lập tức để đảm bảo tuyến đường mới được fetch
+                setDynamicDirections(null);
+                // Reset debounce timer để cho phép fetch tuyến đường ngay lập tức
+                (window as any).__lastParentDirectionsFetch = 0;
+                // Reset last currentStopIndex để trigger clear dynamicDirections trong useEffect
+                (window as any).__lastParentCurrentStopIndex = prev;
+                return dbCurrentStopSequence;
+              }
+              return prev;
+            });
+          } else {
+            console.warn(
+              "[Parent] ⚠️ No currentStop or diemHienTai in periodic fetch:",
+              { trip, tripDetail }
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "[Parent] Failed to fetch trip detail for currentStopIndex:",
+          error
+        );
+      }
+    }, 3000); // 🔥 FIX: Fetch every 3 seconds (giảm từ 10s) để cập nhật nhanh hơn
+
+    return () => clearInterval(interval);
+  }, [selectedTripId, tripStatus]);
+
+  // 🔥 NEW: Track last GPS position to detect significant changes
+  const lastGpsLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const prevBannerRef = useRef<{ type: string; description?: string } | null>(
+    null
+  );
+
+  // Calculate distance between two GPS points (Haversine formula)
+  function getDistance(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+  ): number {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  }
+
+  // 🔥 NEW: Fetch dynamic directions from bus position to next stop
+  // 🔥 FIX: Làm giống hệt bên tài xế - dùng currentStopIndex để slice stops
+  useEffect(() => {
+    console.log("[Parent] 🔍 Dynamic directions useEffect triggered:", {
       hasBusLocation: !!busLocation,
       busLocation,
       stopsCount: stops?.length || 0,
       currentStopIndex,
+      tripStatus,
+      selectedTripId,
+      stopsSequences:
+        stops?.map((s, i) => ({
+          index: i,
+          sequence: s.sequence,
+          label: s.label,
+        })) || [],
     });
 
     // Need bus location and at least one remaining stop
     if (!busLocation || !stops || stops.length === 0) {
-      console.log("[Parent] Skipping dynamic directions - missing data");
+      console.log("[Parent] ❌ Skipping dynamic directions - missing data", {
+        hasBusLocation: !!busLocation,
+        hasStops: !!stops,
+        stopsLength: stops?.length || 0,
+      });
       return;
     }
 
-    // Get remaining stops (from current stop onwards)
-    const remainingStops = stops.slice(currentStopIndex);
-    if (remainingStops.length === 0) {
-      console.log("[Parent] No remaining stops");
-      setDynamicDirections(null);
+    // 🔥 FIX: Validate stops array has sequence property
+    const stopsWithSequence = stops.filter(
+      (s) => typeof s.sequence === "number"
+    );
+    if (stopsWithSequence.length === 0) {
+      console.warn(
+        "[Parent] ⚠️ No stops with sequence property, cannot calculate route"
+      );
+      return;
+    }
+
+    if (stopsWithSequence.length !== stops.length) {
+      console.warn(
+        `[Parent] ⚠️ Some stops missing sequence: ${stopsWithSequence.length}/${stops.length} have sequence`
+      );
+    }
+
+    // 🔥 FIX: Chỉ tính tuyến đường khi trip đang chạy (nhưng không chặn nếu tripStatus chưa được set)
+    // Cho phép tính tuyến đường nếu tripStatus là null/undefined hoặc "dang_chay"
+    if (tripStatus && tripStatus !== "dang_chay") {
+      console.log("[Parent] ❌ Skipping - trip not running:", tripStatus);
       return;
     }
 
@@ -785,21 +1052,251 @@ export default function ParentDashboard() {
       !Number.isFinite(busLocation.lat) ||
       !Number.isFinite(busLocation.lng)
     ) {
+      console.log("[Parent] ❌ Invalid bus coordinates");
       return;
     }
 
-    // Debounce: only fetch every 10s
+    // 🔥 FIX: Kiểm tra xem currentStopIndex có thay đổi không TRƯỚC TIÊN
+    // Nếu currentStopIndex thay đổi (tài xế rời điểm dừng), cần clear và fetch lại tuyến đường ngay lập tức
+    const lastCurrentStopIndexRef = (window as any)
+      .__lastParentCurrentStopIndex;
+    const currentStopIndexChanged =
+      lastCurrentStopIndexRef === undefined ||
+      lastCurrentStopIndexRef !== currentStopIndex;
+
+    // 🔥 FIX: Clear dynamicDirections ngay khi currentStopIndex thay đổi (TRƯỚC khi check debounce)
+    if (currentStopIndexChanged) {
+      console.log(
+        `[Parent] 🔄 Current stop index changed from ${lastCurrentStopIndexRef} to ${currentStopIndex}, clearing old route immediately`
+      );
+      // Clear dynamicDirections cũ ngay lập tức để đảm bảo tuyến đường mới được hiển thị
+      setDynamicDirections(null);
+      // Reset debounce timer để cho phép fetch ngay
+      (window as any).__lastParentDirectionsFetch = 0;
+      // Lưu currentStopIndex mới ngay lập tức
+      (window as any).__lastParentCurrentStopIndex = currentStopIndex;
+    }
+
+    // 🔥 FIX: Kiểm tra xem GPS có thay đổi đáng kể không (> 50m)
+    const shouldUpdateImmediately =
+      !lastGpsLocationRef.current ||
+      getDistance(
+        busLocation.lat,
+        busLocation.lng,
+        lastGpsLocationRef.current.lat,
+        lastGpsLocationRef.current.lng
+      ) > 50; // Cập nhật ngay nếu di chuyển > 50m
+
+    // Debounce: giảm từ 10s xuống 2s để responsive hơn
+    // Nhưng nếu GPS thay đổi đáng kể (> 50m) hoặc currentStopIndex thay đổi, cập nhật ngay lập tức
     const lastFetch = (window as any).__lastParentDirectionsFetch || 0;
     const now = Date.now();
-    if (now - lastFetch < 10000) {
-      console.log("[Parent] Skipping - fetched recently");
+    const debounceTime =
+      shouldUpdateImmediately || currentStopIndexChanged ? 0 : 2000; // 0ms nếu GPS thay đổi đáng kể hoặc currentStopIndex thay đổi, 2s nếu không
+
+    if (now - lastFetch < debounceTime) {
+      console.log(
+        `[Parent] ⏳ Skipping - fetched recently (${Math.ceil(
+          (debounceTime - (now - lastFetch)) / 1000
+        )}s ago)`
+      );
       return;
     }
+
+    // Lưu currentStopIndex hiện tại để so sánh lần sau (nếu chưa lưu ở trên)
+    if (!currentStopIndexChanged) {
+      (window as any).__lastParentCurrentStopIndex = currentStopIndex;
+    }
+
+    // Cập nhật vị trí GPS đã dùng
+    lastGpsLocationRef.current = {
+      lat: busLocation.lat,
+      lng: busLocation.lng,
+    };
     (window as any).__lastParentDirectionsFetch = now;
 
-    // Build waypoints: all stops except the last one
+    // 🔥 FIX: Tính tuyến đường từ GPS đến các điểm dừng CÒN LẠI (giống hệt bên tài xế)
+    // currentStopIndex từ backend là sequence number (1, 2, 3...), không phải array index (0, 1, 2...)
+    // Cần convert sequence number thành array index
+    // 🔥 QUAN TRỌNG: diemHienTai = sequence của điểm TIẾP THEO sau khi rời điểm hiện tại
+    // Ví dụ: Rời điểm 1 → diemHienTai = 2 (điểm tiếp theo)
+    // Vậy cần slice từ điểm có sequence = diemHienTai
+
+    // 🔥 FIX: Đảm bảo stops array được sort đúng trước khi convert
+    // Chỉ dùng stops có sequence property để đảm bảo tính toán đúng
+    const sortedStops = [...stopsWithSequence].sort(
+      (a, b) => (a.sequence || 0) - (b.sequence || 0)
+    );
+
+    // 🔥 FIX: Validate sortedStops có đủ stops
+    if (sortedStops.length === 0) {
+      console.warn(
+        "[Parent] ⚠️ No stops after sorting, cannot calculate route"
+      );
+      return;
+    }
+
+    // 🔥 FIX: Log thông tin để debug
+    console.log("[Parent] 🔍 Calculating route with:", {
+      currentStopIndex, // Sequence number từ database
+      sortedStopsCount: sortedStops.length,
+      sortedStopsSequences: sortedStops.map((s, i) => ({
+        index: i,
+        sequence: s.sequence,
+        label: s.label,
+      })),
+    });
+
+    let actualCurrentStop = 0;
+    if (currentStopIndex > 0) {
+      // Tìm index của stop có sequence = currentStopIndex trong sortedStops
+      const stopIndex = sortedStops.findIndex(
+        (s) => (s.sequence || 0) === currentStopIndex
+      );
+      if (stopIndex >= 0) {
+        actualCurrentStop = stopIndex;
+        console.log(
+          `[Parent] ✅ Found stop with sequence ${currentStopIndex} at array index ${stopIndex} (${
+            sortedStops[stopIndex]?.label || sortedStops[stopIndex]?.id
+          })`
+        );
+      } else {
+        // 🔥 FIX: Fallback logic - tìm stop gần nhất với currentStopIndex
+        // Nếu không tìm thấy exact match, tìm stop có sequence gần nhất nhưng <= currentStopIndex
+        const nearestStopIndex = sortedStops.findLastIndex(
+          (s) => (s.sequence || 0) <= currentStopIndex
+        );
+        if (nearestStopIndex >= 0) {
+          actualCurrentStop = nearestStopIndex;
+          console.warn(
+            `[Parent] ⚠️ Stop with sequence ${currentStopIndex} not found, using nearest stop at array index ${nearestStopIndex} (sequence: ${sortedStops[nearestStopIndex]?.sequence})`
+          );
+        } else {
+          // Nếu không tìm thấy stop nào có sequence <= currentStopIndex, bắt đầu từ đầu
+          actualCurrentStop = 0;
+          console.warn(
+            `[Parent] ⚠️ Stop with sequence ${currentStopIndex} not found and no nearest stop, starting from first stop`,
+            {
+              stopsSequences: sortedStops.map((s, i) => ({
+                index: i,
+                sequence: s.sequence,
+                label: s.label,
+              })),
+              currentStopIndex,
+            }
+          );
+        }
+      }
+    } else {
+      console.log(
+        `[Parent] ℹ️ currentStopIndex is ${currentStopIndex}, starting from first stop`
+      );
+    }
+
+    // Lấy các điểm dừng CÒN LẠI (từ điểm tiếp theo đến điểm cuối)
+    // Nếu chưa rời điểm dừng 1 (actualCurrentStop = 0): GPS → điểm 1 → điểm 2 → ... → điểm cuối
+    // Nếu đã rời điểm dừng 1 (actualCurrentStop > 0): GPS → điểm tiếp theo → ... → điểm cuối
+    const remainingStops = sortedStops.slice(actualCurrentStop);
+
+    console.log("[Parent] 🔍 DEBUG - Route calculation:", {
+      currentStopIndex, // Sequence number from backend
+      actualCurrentStop, // Array index after conversion
+      totalStops: sortedStops.length,
+      remainingStopsCount: remainingStops.length,
+      allStops: sortedStops.map((s, i) => ({
+        index: i,
+        sequence: s.sequence,
+        id: s.id,
+        label: s.label,
+        isIncluded: i >= actualCurrentStop,
+      })),
+      remainingStops: remainingStops.map((s) => ({
+        sequence: s.sequence,
+        id: s.id,
+        label: s.label,
+      })),
+    });
+
+    if (remainingStops.length === 0) {
+      console.log("[Parent] ❌ No remaining stops", {
+        currentStopIndex, // Sequence number
+        actualCurrentStop, // Array index
+        stopsLength: sortedStops.length,
+        sortedStops: sortedStops.map((s, i) => ({
+          index: i,
+          sequence: s.sequence,
+          label: s.label,
+        })),
+      });
+      setDynamicDirections(null);
+      return;
+    }
+
+    // 🔥 FIX: Logic clear dynamicDirections đã được di chuyển lên trên (trước debounce check)
+    // Để đảm bảo khi currentStopIndex thay đổi, tuyến đường được clear ngay và fetch lại ngay lập tức
+
+    console.log("[Parent] ✅ Calculating route:", {
+      currentStopIndex,
+      actualCurrentStop,
+      totalStops: sortedStops.length,
+      remainingStopsCount: remainingStops.length,
+      firstRemainingStop: remainingStops[0]?.label || remainingStops[0]?.id,
+      firstRemainingStopSequence: remainingStops[0]?.sequence,
+      firstRemainingStopCoords: {
+        lat: remainingStops[0]?.lat,
+        lng: remainingStops[0]?.lng,
+      },
+      routeOrder: remainingStops
+        .map((s, i) => `${i + 1}. ${s.label || s.id} (seq: ${s.sequence})`)
+        .join(" → "),
+    });
+
+    const firstRemainingStop = remainingStops[0];
+    const firstRemainingStopLat = Number(firstRemainingStop.lat);
+    const firstRemainingStopLng = Number(firstRemainingStop.lng);
+
+    if (
+      !Number.isFinite(firstRemainingStopLat) ||
+      !Number.isFinite(firstRemainingStopLng)
+    ) {
+      console.warn("[Parent] Invalid first remaining stop coords");
+      return;
+    }
+
+    // Nếu chỉ có 1 điểm dừng còn lại, tính trực tiếp từ GPS đến điểm đó
+    if (remainingStops.length === 1) {
+      console.log(
+        `[Parent] 🗺️ Fetching route: GPS → Next stop (${firstRemainingStopLat},${firstRemainingStopLng})`
+      );
+      apiClient
+        .getDirections({
+          origin: `${busLocation.lat},${busLocation.lng}`,
+          destination: `${firstRemainingStopLat},${firstRemainingStopLng}`,
+          mode: "driving",
+          vehicleType: "bus",
+          _t: Date.now(),
+        } as any)
+        .then((response: any) => {
+          const polyline =
+            response?.data?.polyline ||
+            response?.polyline ||
+            response?.routes?.[0]?.overview_polyline?.points;
+          if (polyline && typeof polyline === "string") {
+            setDynamicDirections(polyline);
+          } else {
+            setDynamicDirections(null);
+          }
+        })
+        .catch((err: any) => {
+          console.warn("[Parent] Dynamic directions failed:", err);
+          setDynamicDirections(null);
+        });
+      return;
+    }
+
+    // Nếu có nhiều điểm dừng còn lại: GPS → Điểm tiếp theo → Điểm 2 → ... → Điểm cuối
     const waypoints = remainingStops
-      .slice(0, -1)
+      .slice(1, -1) // Tất cả điểm dừng trừ điểm đầu và điểm cuối
       .map((stop) => {
         const lat = Number(stop.lat);
         const lng = Number(stop.lng);
@@ -821,17 +1318,31 @@ export default function ParentDashboard() {
     }
 
     console.log(
-      `[Parent] 🗺️ Fetching dynamic route: Bus → ${waypoints.length} waypoint(s) → Destination`
+      `[Parent] 🗺️ Fetching route: GPS (${busLocation.lat},${busLocation.lng}) → Next stop (${firstRemainingStopLat},${firstRemainingStopLng}) → ${waypoints.length} waypoint(s) → Final stop (${destinationLat},${destinationLng})`
     );
 
-    // Fetch directions with waypoints
+    // 🔥 FIX: Tính tuyến từ GPS → Điểm tiếp theo → các điểm tiếp theo → điểm cuối
+    // Nếu đã rời điểm dừng 1, không còn chỉ đến điểm dừng 1 nữa
     apiClient
       .getDirections({
         origin: `${busLocation.lat},${busLocation.lng}`,
         destination: `${destinationLat},${destinationLng}`,
-        waypoints: waypoints,
+        waypoints:
+          waypoints.length > 0
+            ? [
+                {
+                  location: `${firstRemainingStopLat},${firstRemainingStopLng}`,
+                },
+                ...waypoints,
+              ]
+            : [
+                {
+                  location: `${firstRemainingStopLat},${firstRemainingStopLng}`,
+                },
+              ],
         mode: "driving",
         vehicleType: "bus",
+        _t: Date.now(), // Force bypass cache when GPS changes
       } as any) // Cast to any to allow cache buster
       .then((response: any) => {
         const polyline =
@@ -855,7 +1366,60 @@ export default function ParentDashboard() {
         console.warn("[Parent] Dynamic directions failed:", err);
         setDynamicDirections(null);
       });
-  }, [busLocation, currentStopIndex, stops]);
+  }, [busLocation, currentStopIndex, stops, tripStatus]); // 🔥 FIX: Add tripStatus to dependencies
+
+  // 🔥 NEW: Validate và reset currentStopIndex khi stops thay đổi (đảm bảo tính toán đúng khi refresh)
+  useEffect(() => {
+    if (!stops || stops.length === 0 || currentStopIndex === 0) {
+      return;
+    }
+
+    // Đảm bảo stops có sequence property
+    const stopsWithSequence = stops.filter(
+      (s) => typeof s.sequence === "number"
+    );
+    if (stopsWithSequence.length === 0) {
+      return;
+    }
+
+    // Sort stops để đảm bảo thứ tự đúng
+    const sortedStops = [...stopsWithSequence].sort(
+      (a, b) => (a.sequence || 0) - (b.sequence || 0)
+    );
+
+    // Kiểm tra xem currentStopIndex có match với bất kỳ stop nào không
+    const stopIndex = sortedStops.findIndex(
+      (s) => (s.sequence || 0) === currentStopIndex
+    );
+
+    if (stopIndex < 0) {
+      // Nếu không tìm thấy, tìm stop gần nhất
+      const nearestStopIndex = sortedStops.findLastIndex(
+        (s) => (s.sequence || 0) <= currentStopIndex
+      );
+      if (nearestStopIndex >= 0) {
+        const nearestSequence = sortedStops[nearestStopIndex]?.sequence;
+        if (nearestSequence && nearestSequence !== currentStopIndex) {
+          console.warn(
+            `[Parent] ⚠️ currentStopIndex ${currentStopIndex} không match với stops, cập nhật về ${nearestSequence}`
+          );
+          setCurrentStopIndex(nearestSequence);
+          // Reset debounce timer để fetch lại tuyến đường
+          (window as any).__lastParentDirectionsFetch = 0;
+          (window as any).__lastParentCurrentStopIndex = currentStopIndex;
+        }
+      } else {
+        // Nếu không tìm thấy stop nào, reset về 0
+        console.warn(
+          `[Parent] ⚠️ currentStopIndex ${currentStopIndex} không hợp lệ, reset về 0`
+        );
+        setCurrentStopIndex(0);
+        // Reset debounce timer để fetch lại tuyến đường
+        (window as any).__lastParentDirectionsFetch = 0;
+        (window as any).__lastParentCurrentStopIndex = 0;
+      }
+    }
+  }, [stops, currentStopIndex]);
 
   // When route changes or student changes, load stops for that route
   useEffect(() => {
@@ -927,14 +1491,25 @@ export default function ParentDashboard() {
           label: s.tenDiem || s.ten,
           sequence: s.thuTu || s.sequence || 0, // Map sequence for correct ordering
         }));
-        // Sort by sequence to ensure correct order
+        // 🔥 FIX: Sort by sequence to ensure correct order (CRITICAL for route calculation)
         mapped.sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0));
 
-        setStops(
-          mapped.filter(
-            (p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng)
-          )
+        const filteredAndSorted = mapped.filter(
+          (p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng)
         );
+
+        // 🔥 FIX: Đảm bảo stops được sort đúng và có sequence property
+        console.log("[Parent] 🔍 Setting stops array:", {
+          count: filteredAndSorted.length,
+          stops: filteredAndSorted.map((s, i) => ({
+            index: i,
+            sequence: s.sequence,
+            label: s.label,
+            id: s.id,
+          })),
+        });
+
+        setStops(filteredAndSorted);
       } catch (e) {
         console.warn("[Parent] loadStops failed", e);
       }
@@ -1160,18 +1735,34 @@ export default function ParentDashboard() {
               }
 
               // 🔥 NEW: Update current stop index from trip data
-              if (typeof tripDetail?.currentStop === "number") {
-                setCurrentStopIndex(tripDetail.currentStop);
-                console.log(
-                  "[Parent] Set currentStopIndex from trip:",
-                  tripDetail.currentStop
-                );
-              } else if (typeof tripDetail?.diemHienTai === "number") {
-                setCurrentStopIndex(tripDetail.diemHienTai);
-                console.log(
-                  "[Parent] Set currentStopIndex from diemHienTai:",
-                  tripDetail.diemHienTai
-                );
+              // 🔥 FIX: Access trip object from response structure
+              const trip = tripDetail.trip || tripDetail;
+              if (typeof trip?.currentStop === "number") {
+                setCurrentStopIndex((prev) => {
+                  if (prev !== trip.currentStop) {
+                    console.log(
+                      "[Parent] ✅ Set currentStopIndex from trip:",
+                      prev,
+                      "→",
+                      trip.currentStop
+                    );
+                    return trip.currentStop;
+                  }
+                  return prev;
+                });
+              } else if (typeof trip?.diemHienTai === "number") {
+                setCurrentStopIndex((prev) => {
+                  if (prev !== trip.diemHienTai) {
+                    console.log(
+                      "[Parent] ✅ Set currentStopIndex from diemHienTai:",
+                      prev,
+                      "→",
+                      trip.diemHienTai
+                    );
+                    return trip.diemHienTai;
+                  }
+                  return prev;
+                });
               }
 
               // Fallback: Set route ID from trip detail if not already set

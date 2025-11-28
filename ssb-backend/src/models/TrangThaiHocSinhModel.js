@@ -117,13 +117,13 @@ const TrangThaiHocSinhModel = {
       return false;
     }
 
-    const placeholders = studentIds.map(() => '?').join(',');
+    const placeholders = studentIds.map(() => "?").join(",");
     const [rows] = await pool.query(
       `SELECT COUNT(*) as count FROM TrangThaiHocSinh 
        WHERE maChuyen = ? AND maHocSinh IN (${placeholders})`,
       [tripId, ...studentIds]
     );
-    
+
     return rows[0].count > 0;
   },
 };
