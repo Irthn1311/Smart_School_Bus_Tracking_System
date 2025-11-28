@@ -73,8 +73,8 @@ export default function FloatingChat() {
 
   return (
     <div>
-      {/* Floating button */}
-      <div className="fixed right-6 bottom-6 z-[60] flex items-end">
+      {/* Floating button - moved higher to avoid covering pagination */}
+      <div className="fixed right-6 bottom-24 z-[60] flex items-end">
         {/* Chat panel */}
         <div
           ref={panelRef}

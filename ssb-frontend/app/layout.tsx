@@ -9,7 +9,6 @@ import { LanguageProvider } from "@/lib/language-context"
 import { Toaster } from "@/components/ui/toaster"
 import { Suspense } from "react"
 import "./globals.css"
-import FloatingChat from "@/components/ui/floating-chat"
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -43,7 +42,6 @@ export default function RootLayout({
                 <AuthProvider>
                   {children}
                   <Toaster />
-                  <FloatingChat />
                 </AuthProvider>
               </QueryProvider>
             </LanguageProvider>

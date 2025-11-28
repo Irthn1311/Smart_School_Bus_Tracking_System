@@ -116,10 +116,22 @@ export default function StudentsPage() {
       const items = Array.isArray(data) ? data : data?.data || []
       setStudents(items.map(mapStudent))
       
-      // Extract pagination info
-      const pagination = response.pagination || {}
-      setTotal(pagination.total || items.length)
-      setTotalPages(pagination.totalPages || Math.ceil((pagination.total || items.length) / pageSize))
+      // Extract pagination info - backend returns in 'meta', not 'pagination'
+      const pagination = response.meta || response.pagination || {}
+      const totalCount = pagination.total || pagination.totalItems || items.length
+      const calculatedTotalPages = pagination.totalPages || Math.ceil(totalCount / pageSize)
+      
+      console.log('📊 [Students Pagination]', {
+        total: totalCount,
+        totalPages: calculatedTotalPages,
+        currentPage: currentPage,
+        pageSize: pageSize,
+        itemsCount: items.length,
+        pagination: pagination
+      })
+      
+      setTotal(totalCount)
+      setTotalPages(calculatedTotalPages)
       
       // Extract available classes from data
       const classes = new Set<string>()
@@ -183,8 +195,17 @@ export default function StudentsPage() {
   }
 
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
+    console.log('🔄 [Pagination] handlePageChange called:', {
+      newPage,
+      currentPage,
+      totalPages,
+      isValid: newPage >= 1 && newPage <= totalPages
+    })
+    if (newPage >= 1 && newPage <= totalPages && newPage !== currentPage) {
+      console.log('✅ [Pagination] Changing page from', currentPage, 'to', newPage)
       setCurrentPage(newPage)
+    } else {
+      console.warn('⚠️ [Pagination] Invalid page change:', { newPage, totalPages, currentPage })
     }
   }
 
@@ -492,8 +513,14 @@ export default function StudentsPage() {
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => handlePageChange(currentPage - 1)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          console.log('👆 [Pagination] Previous button clicked')
+                          handlePageChange(currentPage - 1)
+                        }}
                         disabled={currentPage === 1}
+                        type="button"
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
@@ -514,7 +541,13 @@ export default function StudentsPage() {
                               key={pageNum}
                               variant={currentPage === pageNum ? "default" : "outline"}
                               size="sm"
-                              onClick={() => handlePageChange(pageNum)}
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                console.log('👆 [Pagination] Page button clicked:', pageNum)
+                                handlePageChange(pageNum)
+                              }}
+                              type="button"
                             >
                               {pageNum}
                             </Button>
@@ -524,8 +557,14 @@ export default function StudentsPage() {
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={() => handlePageChange(currentPage + 1)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          console.log('👆 [Pagination] Next button clicked')
+                          handlePageChange(currentPage + 1)
+                        }}
                         disabled={currentPage === totalPages}
+                        type="button"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </Button>
