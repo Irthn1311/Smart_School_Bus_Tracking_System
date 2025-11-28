@@ -33,6 +33,41 @@ export default function ParentNotifications() {
 
   const iconForType = (t: string) => (t === "warning" ? AlertCircle : t === "success" ? CheckCircle2 : Info)
 
+  // Helper function to determine notification type based on loaiThongBao and content
+  const getNotificationType = (notification: any): "success" | "warning" | "info" => {
+    const { loaiThongBao, tieuDe, noiDung } = notification
+    const title = (tieuDe || "").toLowerCase()
+    const content = (noiDung || "").toLowerCase()
+    const combinedText = `${title} ${content}`
+
+    // 1. CẢNH BÁO (warning): Sự cố, trễ, delay, vắng mặt
+    if (loaiThongBao === "su_co") {
+      return "warning"
+    }
+    
+    // Kiểm tra từ khóa cảnh báo trong tiêu đề/nội dung
+    const warningKeywords = [
+      "trễ", "delay", "chậm", "vắng", "vắng mặt", "sự cố", 
+      "cảnh báo", "⚠️", "⏰", "xe đang trễ", "xe trễ"
+    ]
+    if (warningKeywords.some(keyword => combinedText.includes(keyword))) {
+      return "warning"
+    }
+
+    // 2. THÀNH CÔNG (success): Hoàn thành, đã đón, đã trả, lên xe, kết thúc
+    const successKeywords = [
+      "hoàn thành", "completed", "đã đón", "đã trả", "lên xe", 
+      "kết thúc", "thành công", "✅", "đã đến", "đã đến nơi"
+    ]
+    if (successKeywords.some(keyword => combinedText.includes(keyword))) {
+      return "success"
+    }
+
+    // 3. THÔNG TIN (info): Bắt đầu, khởi hành, sắp đến, approach
+    // Mặc định cho chuyen_di và các thông báo khác
+    return "info"
+  }
+
   // Load initial notifications from API
   useEffect(() => {
     const load = async () => {
@@ -44,7 +79,7 @@ export default function ParentNotifications() {
         console.log('🔍 [PARENT LOAD] Total notifications from API:', arr.length)
         
         const mapped = arr.map((n: any) => {
-          const t = n.loaiThongBao === "su_co" ? "warning" : n.loaiThongBao === "chuyen_di" ? "info" : "info"
+          const t = getNotificationType(n)
           const dt = n.thoiGianGui ? new Date(n.thoiGianGui) : new Date()
           
           console.log('📋 [PARENT LOAD] Processing notification:', {
@@ -89,8 +124,8 @@ export default function ParentNotifications() {
       })
       
       const dt = payload.thoiGianGui ? new Date(payload.thoiGianGui) : new Date()
-      const t = payload.loaiThongBao === "su_co" ? "warning" : payload.loaiThongBao === "chuyen_di" ? "info" : "info"
-      console.log('🔍 [PARENT NOTIF] Calculated type:', t, 'from loaiThongBao:', payload.loaiThongBao)
+      const t = getNotificationType(payload)
+      console.log('🔍 [PARENT NOTIF] Calculated type:', t, 'from loaiThongBao:', payload.loaiThongBao, 'tieuDe:', payload.tieuDe)
       
       const item = {
         id: payload.maThongBao || Date.now(),

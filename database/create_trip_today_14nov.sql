@@ -16,9 +16,9 @@ USE school_bus_system;
 -- 🗑️ XÓA DỮ LIỆU CŨ (nếu có)
 -- ───────────────────────────────────────────────────────────────────────────
 
-DELETE FROM TrangThaiHocSinh WHERE maChuyen IN (
-  SELECT maChuyen FROM ChuyenDi WHERE ngayChay = '2025-11-14'
-);
+DELETE tth FROM TrangThaiHocSinh tth
+INNER JOIN ChuyenDi cd ON tth.maChuyen = cd.maChuyen
+WHERE cd.ngayChay = '2025-11-14';
 
 DELETE FROM ChuyenDi WHERE ngayChay = '2025-11-14';
 

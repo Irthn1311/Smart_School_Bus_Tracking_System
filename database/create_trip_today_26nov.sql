@@ -18,16 +18,16 @@ USE school_bus_system;
 -- 🗑️ XÓA DỮ LIỆU CŨ (nếu có)
 -- ───────────────────────────────────────────────────────────────────────────
 
-DELETE FROM TrangThaiHocSinh WHERE maChuyen IN (
-  SELECT maChuyen FROM ChuyenDi WHERE ngayChay = '2025-11-28'
-);
+DELETE tth FROM TrangThaiHocSinh tth
+INNER JOIN ChuyenDi cd ON tth.maChuyen = cd.maChuyen
+WHERE cd.ngayChay = '2025-11-28';
 
 DELETE FROM ChuyenDi WHERE ngayChay = '2025-11-28';
 
 -- Xóa lịch trình ngày hôm nay (nếu có) để tạo lại
-DELETE FROM schedule_student_stops WHERE maLichTrinh IN (
-  SELECT maLichTrinh FROM LichTrinh WHERE ngayChay = '2025-11-28'
-);
+DELETE sss FROM schedule_student_stops sss
+INNER JOIN LichTrinh lt ON sss.maLichTrinh = lt.maLichTrinh
+WHERE lt.ngayChay = '2025-11-28';
 DELETE FROM LichTrinh WHERE ngayChay = '2025-11-28';
 
 -- ───────────────────────────────────────────────────────────────────────────
