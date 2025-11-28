@@ -1107,9 +1107,35 @@ class RouteController {
       // 🔥 BỎ FILTER KHOẢNG CÁCH - Trả về TẤT CẢ suggestions đã lưu trong DB
       // Vì những suggestions này đã được admin chọn thủ công, không nên filter nữa
       // Group suggestions theo stop (KHÔNG filter theo khoảng cách)
-      const stopsWithSuggestions = routeStops.map((stop) => {
+      // 🔥 FIX: Loại bỏ duplicate - mỗi học sinh chỉ xuất hiện ở điểm dừng đầu tiên (sequence nhỏ nhất)
+      const assignedStudentIds = new Set();
+      const sortedRouteStops = [...routeStops].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      
+      const stopsWithSuggestions = sortedRouteStops.map((stop) => {
         // Lấy TẤT CẢ suggestions cho stop này (không filter khoảng cách)
         const stopSuggestions = allSuggestions.filter((s) => s.maDiemDung === stop.maDiem);
+        
+        // Loại bỏ duplicate: chỉ lấy học sinh chưa được gán vào điểm dừng trước đó
+        const uniqueStudents = stopSuggestions
+          .filter((s) => {
+            if (assignedStudentIds.has(s.maHocSinh)) {
+              return false; // Học sinh đã được gán vào điểm dừng trước đó
+            }
+            assignedStudentIds.add(s.maHocSinh);
+            return true;
+          })
+          // Loại bỏ duplicate trong cùng một stop (nếu có)
+          .filter((s, index, arr) => {
+            const firstIndex = arr.findIndex((item) => item.maHocSinh === s.maHocSinh);
+            return firstIndex === index;
+          })
+          .map((s) => ({
+            maHocSinh: s.maHocSinh,
+            hoTen: s.tenHocSinh,
+            lop: s.lop,
+            viDo: s.studentLat,
+            kinhDo: s.studentLng,
+          }));
 
         return {
           sequence: stop.sequence,
@@ -1118,14 +1144,8 @@ class RouteController {
           viDo: stop.viDo,
           kinhDo: stop.kinhDo,
           address: stop.address,
-          studentCount: stopSuggestions.length,
-          students: stopSuggestions.map((s) => ({
-            maHocSinh: s.maHocSinh,
-            hoTen: s.tenHocSinh,
-            lop: s.lop,
-            viDo: s.studentLat,
-            kinhDo: s.studentLng,
-          })),
+          studentCount: uniqueStudents.length,
+          students: uniqueStudents,
         };
       });
 

@@ -36,7 +36,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useRouteDetail, useReorderStops, useRemoveStopFromRoute, useRebuildPolyline, useAddStopToRoute } from '@/lib/hooks/useRoutes';
 import { useStopsList, useCreateStop } from '@/lib/hooks/useStops';
 import SSBMap, { StopDTO } from '@/components/map/SSBMap';
-import { GripVertical, Plus, Trash2, RefreshCw, ArrowLeft, MapPin, Clock, Edit } from 'lucide-react';
+import { apiClient } from '@/lib/api';
+import { GripVertical, Plus, Trash2, RefreshCw, ArrowLeft, MapPin, Clock, Edit, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
@@ -51,10 +52,19 @@ const AddStopDialog = dynamic(() => import('@/components/admin/AddStopDialog'), 
   loading: () => <div>Đang tải...</div>,
 });
 
-function SortableStopItem({ stop, onDelete }: { stop: StopDTO; onDelete: () => void }) {
+function SortableStopItem({ 
+  stop, 
+  onDelete, 
+  students = [] 
+}: { 
+  stop: StopDTO; 
+  onDelete: () => void;
+  students?: Array<{ maHocSinh: number; hoTen: string; lop?: string; diaChi?: string }>;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stop.maDiem,
   });
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,34 +72,81 @@ function SortableStopItem({ stop, onDelete }: { stop: StopDTO; onDelete: () => v
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const studentCount = students.length;
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-        <GripVertical className="w-5 h-5 text-muted-foreground" />
-      </div>
-      <div className="flex-1">
+    <div ref={setNodeRef} style={style} className="border rounded-lg bg-card">
+      <div className="flex items-center gap-3 p-3">
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+          <GripVertical className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
+              {stop.sequence}
+            </Badge>
+            <h4 className="font-semibold">{stop.tenDiem}</h4>
+            {studentCount > 0 && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {studentCount}
+              </Badge>
+            )}
+          </div>
+          {stop.address && <p className="text-sm text-muted-foreground mt-1">{stop.address}</p>}
+          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+            {stop.viDo != null && stop.kinhDo != null && (
+              <span>📍 {Number(stop.viDo).toFixed(6)}, {Number(stop.kinhDo).toFixed(6)}</span>
+            )}
+            {stop.dwell_seconds && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Dừng: {stop.dwell_seconds}s
+              </span>
+            )}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
-            {stop.sequence}
-          </Badge>
-          <h4 className="font-semibold">{stop.tenDiem}</h4>
-        </div>
-        {stop.address && <p className="text-sm text-muted-foreground mt-1">{stop.address}</p>}
-        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-          {stop.viDo != null && stop.kinhDo != null && (
-            <span>📍 {Number(stop.viDo).toFixed(6)}, {Number(stop.kinhDo).toFixed(6)}</span>
+          {studentCount > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="h-8 w-8"
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </Button>
           )}
-          {stop.dwell_seconds && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Dừng: {stop.dwell_seconds}s
-            </span>
-          )}
+          <Button variant="ghost" size="icon" onClick={onDelete} className="text-destructive hover:text-destructive">
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
       </div>
-      <Button variant="ghost" size="icon" onClick={onDelete} className="text-destructive hover:text-destructive">
-        <Trash2 className="w-4 h-4" />
-      </Button>
+      {isExpanded && studentCount > 0 && (
+        <div className="px-3 pb-3 border-t pt-3 mt-2">
+          <div className="text-sm font-medium mb-2 flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Danh sách học sinh ({studentCount})
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {students.map((student) => (
+              <div key={student.maHocSinh} className="p-2 border rounded bg-background">
+                <p className="font-medium text-sm">{student.hoTen}</p>
+                {student.lop && (
+                  <p className="text-xs text-muted-foreground">Lớp: {student.lop}</p>
+                )}
+                {student.diaChi && (
+                  <p className="text-xs text-muted-foreground">{student.diaChi}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -111,6 +168,8 @@ export default function RouteDetailPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [deleteStopId, setDeleteStopId] = useState<number | null>(null);
+  const [studentsByStop, setStudentsByStop] = useState<Record<string, Array<{ maHocSinh: number; hoTen: string; lop?: string; diaChi?: string }>>>({});
+  const [loadingStudents, setLoadingStudents] = useState(false);
 
   // P2 Fix: Join route room and listen for route_updated socket event (auto-refresh after rebuild polyline)
   useEffect(() => {
@@ -145,6 +204,77 @@ export default function RouteDetailPage() {
   const { data: stopsListData } = useStopsList(
     isAddDialogOpen ? { limit: 100 } : undefined
   );
+
+  // Fetch students for each stop when route is loaded
+  useEffect(() => {
+    if (!route || !routeId) return;
+
+    const fetchStudents = async () => {
+      setLoadingStudents(true);
+      try {
+        const response = await apiClient.getRouteStopSuggestions(parseInt(routeId));
+        const data = (response as any).data || {};
+        const stopsWithStudents = data.stops || [];
+
+        // Map students by stop key (sequence_maDiem)
+        const studentsMap: Record<string, Array<{ maHocSinh: number; hoTen: string; lop?: string; diaChi?: string }>> = {};
+        
+        // Track students that have been assigned to avoid duplicates
+        const assignedStudentIds = new Set<number>();
+        
+        // Process stops in sequence order to ensure students appear only in first stop
+        const sortedStops = [...stopsWithStudents].sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0));
+        
+        sortedStops.forEach((stop: any) => {
+          if (stop.students && Array.isArray(stop.students) && stop.students.length > 0) {
+            const stopKey = `${stop.sequence}_${stop.maDiem}`;
+            
+            // Filter out duplicate students (same maHocSinh) within this stop
+            const uniqueStudents = stop.students
+              .filter((s: any) => {
+                // Remove if student already assigned to a previous stop
+                if (assignedStudentIds.has(s.maHocSinh)) {
+                  return false;
+                }
+                return true;
+              })
+              .map((s: any, index: number, arr: any[]) => {
+                // Also check for duplicates within the same stop
+                const firstIndex = arr.findIndex((item: any) => item.maHocSinh === s.maHocSinh);
+                if (firstIndex !== index) {
+                  return null; // Duplicate within same stop
+                }
+                return {
+                  maHocSinh: s.maHocSinh,
+                  hoTen: s.hoTen || s.tenHocSinh || s.name || '',
+                  lop: s.lop,
+                  diaChi: s.diaChi || s.address,
+                };
+              })
+              .filter((s: any) => s !== null) as Array<{ maHocSinh: number; hoTen: string; lop?: string; diaChi?: string }>;
+            
+            // Mark these students as assigned
+            uniqueStudents.forEach((s) => {
+              assignedStudentIds.add(s.maHocSinh);
+            });
+            
+            if (uniqueStudents.length > 0) {
+              studentsMap[stopKey] = uniqueStudents;
+            }
+          }
+        });
+
+        setStudentsByStop(studentsMap);
+      } catch (error) {
+        console.error('Failed to load students for stops:', error);
+        setStudentsByStop({});
+      } finally {
+        setLoadingStudents(false);
+      }
+    };
+
+    fetchStudents();
+  }, [route, routeId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -214,7 +344,15 @@ export default function RouteDetailPage() {
 
   const confirmDelete = () => {
     if (deleteStopId) {
-      removeMutation.mutate({ routeId, stopId: deleteStopId });
+      removeMutation.mutate(
+        { routeId, stopId: deleteStopId },
+        {
+          onSuccess: () => {
+            // Refresh students list after deleting stop
+            queryClient.invalidateQueries({ queryKey: routeKeys.detail(routeId) });
+          },
+        }
+      );
       setDeleteStopId(null);
     }
   };
@@ -422,13 +560,18 @@ export default function RouteDetailPage() {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={sortedStops.map((s) => s.maDiem)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-2">
-                    {sortedStops.map((stop) => (
-                      <SortableStopItem
-                        key={stop.maDiem}
-                        stop={stop}
-                        onDelete={() => handleDeleteStop(stop.maDiem)}
-                      />
-                    ))}
+                    {sortedStops.map((stop) => {
+                      const stopKey = `${stop.sequence}_${stop.maDiem}`;
+                      const students = studentsByStop[stopKey] || [];
+                      return (
+                        <SortableStopItem
+                          key={stop.maDiem}
+                          stop={stop}
+                          students={students}
+                          onDelete={() => handleDeleteStop(stop.maDiem)}
+                        />
+                      );
+                    })}
                   </div>
                 </SortableContext>
               </DndContext>
@@ -444,7 +587,16 @@ export default function RouteDetailPage() {
             currentRouteStops={sortedStops}
             onClose={() => setIsAddDialogOpen(false)}
             onAddStop={(data) => {
-              addStopMutation.mutate({ routeId, data }, { onSuccess: () => setIsAddDialogOpen(false) });
+              addStopMutation.mutate(
+                { routeId, data },
+                {
+                  onSuccess: () => {
+                    setIsAddDialogOpen(false);
+                    // Refresh students list after adding stop
+                    queryClient.invalidateQueries({ queryKey: routeKeys.detail(routeId) });
+                  },
+                }
+              );
             }}
             onCreateStop={(data) => {
               createStopMutation.mutate(data, {

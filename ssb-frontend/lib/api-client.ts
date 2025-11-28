@@ -170,6 +170,7 @@ class ApiClient {
     data?: any;
     params?: any;
     signal?: AbortSignal;
+    timeout?: number;
   }): Promise<ApiResponse<T>> {
     try {
       const response = await this.client.request<ApiResponse<T>>({
@@ -178,6 +179,7 @@ class ApiClient {
         data: config.data,
         params: config.params,
         signal: config.signal,
+        timeout: config.timeout,
       });
       return response.data;
     } catch (error) {
@@ -668,6 +670,7 @@ class ApiClient {
       method: "post",
       url: "/bus-stops/optimize-full",
       data,
+      timeout: 120000, // 2 minutes timeout for full optimization
     });
   }
 
@@ -684,6 +687,7 @@ class ApiClient {
       method: "post",
       url: "/bus-stops/create-routes",
       data,
+      timeout: 120000, // 2 minutes timeout for route creation (can take longer due to route splitting)
     });
   }
 

@@ -689,43 +689,71 @@ class ScheduleController {
         return response.notFound(res, "Không tìm thấy lịch trình");
       }
 
-      // Import ScheduleStudentStopModel
+      // Import các models cần thiết
       const ScheduleStudentStopModel = (await import("../models/ScheduleStudentStopModel.js")).default;
+      const RouteService = (await import("../services/RouteService.js")).default;
+      
+      // Lấy tất cả điểm dừng của tuyến đường
+      const routeStops = await RouteService.getStops(schedule.maTuyen);
       
       // Lấy tất cả students của schedule
       const students = await ScheduleStudentStopModel.getByScheduleId(id);
 
-      // Nhóm students theo điểm dừng
-      const studentsByStop = {};
-      students.forEach((student) => {
-        const stopKey = `${student.thuTuDiem}_${student.maDiem}`;
-        if (!studentsByStop[stopKey]) {
-          studentsByStop[stopKey] = {
-            thuTuDiem: student.thuTuDiem,
-            maDiem: student.maDiem,
-            tenDiem: student.tenDiem,
-            stopAddress: student.stopAddress,
-            stopLat: student.stopLat,
-            stopLng: student.stopLng,
-            students: [],
-          };
+      // Tạo map để nhóm students theo điểm dừng
+      // 🔥 FIX: Loại bỏ duplicate - mỗi học sinh chỉ xuất hiện ở một điểm dừng
+      const studentsByStopMap = {};
+      const assignedStudentIds = new Set();
+      
+      // Sắp xếp students theo thuTuDiem để đảm bảo học sinh xuất hiện ở điểm dừng đầu tiên
+      const sortedStudents = [...students].sort((a, b) => (a.thuTuDiem || 0) - (b.thuTuDiem || 0));
+      
+      sortedStudents.forEach((student) => {
+        // Bỏ qua học sinh đã được gán vào điểm dừng trước đó
+        if (assignedStudentIds.has(student.maHocSinh)) {
+          return;
         }
-        studentsByStop[stopKey].students.push({
+        
+        const stopKey = `${student.thuTuDiem}_${student.maDiem}`;
+        if (!studentsByStopMap[stopKey]) {
+          studentsByStopMap[stopKey] = [];
+        }
+        studentsByStopMap[stopKey].push({
           maHocSinh: student.maHocSinh,
           hoTen: student.hoTen,
           lop: student.lop,
           anhDaiDien: student.anhDaiDien,
           diaChi: student.diaChi,
         });
+        
+        assignedStudentIds.add(student.maHocSinh);
       });
 
-      // Convert to array and sort by thuTuDiem
-      const result = Object.values(studentsByStop).sort((a, b) => a.thuTuDiem - b.thuTuDiem);
+      // Tạo kết quả với tất cả điểm dừng, kể cả khi không có học sinh
+      const result = routeStops.map((stop) => {
+        const stopKey = `${stop.sequence}_${stop.maDiem}`;
+        const assignedStudents = studentsByStopMap[stopKey] || [];
+        
+        return {
+          thuTuDiem: stop.sequence,
+          maDiem: stop.maDiem,
+          tenDiem: stop.tenDiem,
+          stopAddress: stop.address,
+          stopLat: stop.viDo,
+          stopLng: stop.kinhDo,
+          students: assignedStudents,
+        };
+      });
+
+      // Sắp xếp theo thuTuDiem
+      result.sort((a, b) => a.thuTuDiem - b.thuTuDiem);
+
+      // Tính lại totalStudents sau khi loại bỏ duplicate
+      const uniqueTotalStudents = assignedStudentIds.size;
 
       return response.ok(res, {
         scheduleId: id,
         studentsByStop: result,
-        totalStudents: students.length,
+        totalStudents: uniqueTotalStudents, // Sử dụng số học sinh unique thay vì tổng số records
       });
     } catch (error) {
       console.error("Error in ScheduleController.getStudents:", error);

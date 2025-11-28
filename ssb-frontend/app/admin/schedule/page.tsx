@@ -1164,49 +1164,60 @@ export default function SchedulePage() {
                           <div className="py-8 text-center text-muted-foreground">
                             Đang tải danh sách học sinh...
                           </div>
-                        ) : scheduleStudents && scheduleStudents.studentsByStop?.length > 0 ? (
+                        ) : scheduleStudents && scheduleStudents.studentsByStop ? (
                           <div className="space-y-4">
                             <div className="text-sm text-muted-foreground">
                               Tổng cộng: <strong>{scheduleStudents.totalStudents}</strong> học sinh
+                              {scheduleStudents.studentsByStop.length > 0 && (
+                                <span className="ml-2">
+                                  • <strong>{scheduleStudents.studentsByStop.length}</strong> điểm dừng
+                                </span>
+                              )}
                             </div>
-                            {scheduleStudents.studentsByStop.map((stop: any, idx: number) => (
-                              <Card key={idx} className="border-border/50">
-                                <CardHeader className="pb-3">
-                                  <CardTitle className="text-base flex items-center gap-2">
-                                    <MapPin className="w-4 h-4 text-primary" />
-                                    Điểm {stop.thuTuDiem}: {stop.tenDiem}
-                                  </CardTitle>
-                                  {stop.stopAddress && (
-                                    <p className="text-xs text-muted-foreground mt-1">{stop.stopAddress}</p>
-                                  )}
-                                </CardHeader>
-                                <CardContent>
-                                  {stop.students.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {stop.students.map((student: any, sIdx: number) => (
-                                        <div key={sIdx} className="flex items-center justify-between p-2 border rounded">
-                                          <div>
-                                            <p className="font-medium text-sm">{student.hoTen}</p>
-                                            {student.lop && (
-                                              <p className="text-xs text-muted-foreground">Lớp: {student.lop}</p>
-                                            )}
-                                            {student.diaChi && (
-                                              <p className="text-xs text-muted-foreground">{student.diaChi}</p>
-                                            )}
+                            {scheduleStudents.studentsByStop.length > 0 ? (
+                              scheduleStudents.studentsByStop.map((stop: any, idx: number) => (
+                                <Card key={`stop-${stop.maDiem}-${stop.thuTuDiem}-${idx}`} className="border-border/50">
+                                  <CardHeader className="pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                      <MapPin className="w-4 h-4 text-primary" />
+                                      Điểm {stop.thuTuDiem}: {stop.tenDiem}
+                                    </CardTitle>
+                                    {stop.stopAddress && (
+                                      <p className="text-xs text-muted-foreground mt-1">{stop.stopAddress}</p>
+                                    )}
+                                  </CardHeader>
+                                  <CardContent>
+                                    {stop.students && stop.students.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {stop.students.map((student: any, sIdx: number) => (
+                                          <div key={`student-${student.maHocSinh}-${sIdx}`} className="flex items-center justify-between p-2 border rounded">
+                                            <div>
+                                              <p className="font-medium text-sm">{student.hoTen}</p>
+                                              {student.lop && (
+                                                <p className="text-xs text-muted-foreground">Lớp: {student.lop}</p>
+                                              )}
+                                              {student.diaChi && (
+                                                <p className="text-xs text-muted-foreground">{student.diaChi}</p>
+                                              )}
+                                            </div>
                                           </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-muted-foreground">Chưa có học sinh</p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            ))}
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground">Chưa có học sinh được phân công</p>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              ))
+                            ) : (
+                              <div className="py-8 text-center text-muted-foreground">
+                                Lịch trình này chưa có điểm dừng nào
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="py-8 text-center text-muted-foreground">
-                            Chưa có học sinh nào được phân công
+                            Không thể tải danh sách học sinh
                           </div>
                         )}
                       </DialogContent>

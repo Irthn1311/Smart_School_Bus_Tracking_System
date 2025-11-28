@@ -244,10 +244,16 @@ export function BusStopOptimizer() {
       }
     } catch (error: any) {
       console.error("Create routes error:", error);
+      const errorMessage = error.message || error.error?.message || "Không thể tạo tuyến đường";
+      const isTimeout = errorMessage.includes("timeout") || errorMessage.includes("TIMEOUT") || error.code === "TIMEOUT";
+      
       toast({
-        title: "Lỗi",
-        description: error.message || "Không thể tạo tuyến đường",
+        title: isTimeout ? "Timeout" : "Lỗi",
+        description: isTimeout 
+          ? "Quá trình tạo tuyến đường mất quá nhiều thời gian. Vui lòng thử lại hoặc giảm số lượng điểm dừng/giới hạn khoảng cách tuyến đường."
+          : errorMessage,
         variant: "destructive",
+        duration: 8000,
       });
     } finally {
       setCreatingRoutes(false);
