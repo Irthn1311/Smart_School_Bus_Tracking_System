@@ -315,6 +315,14 @@ const ChuyenDiModel = {
       fields.push("ghiChu = ?");
       values.push(data.ghiChu);
     }
+    // 🔥 FIX: Thêm xử lý cho diemHienTai (currentStop)
+    if (data.diemHienTai !== undefined) {
+      fields.push("diemHienTai = ?");
+      values.push(data.diemHienTai);
+      console.log(
+        `[ChuyenDiModel] 🔍 Updating diemHienTai for trip ${id} to ${data.diemHienTai}`
+      );
+    }
 
     if (fields.length === 0) {
       return false; // Không có gì để update
@@ -322,11 +330,21 @@ const ChuyenDiModel = {
 
     values.push(id); // Thêm id vào cuối cho WHERE clause
 
-    const [result] = await pool.query(
-      `UPDATE ChuyenDi SET ${fields.join(", ")} WHERE maChuyen = ?`,
-      values
+    const query = `UPDATE ChuyenDi SET ${fields.join(", ")} WHERE maChuyen = ?`;
+    console.log(
+      `[ChuyenDiModel] 🔍 Executing UPDATE query:`,
+      query.replace(/\?/g, (_, i) => {
+        const val = values[i];
+        return typeof val === "string" ? `'${val}'` : val;
+      })
     );
-    return result.affectedRows > 0;
+
+    const [result] = await pool.query(query, values);
+    const affectedRows = result.affectedRows;
+    console.log(
+      `[ChuyenDiModel] ✅ Update result: affectedRows = ${affectedRows}`
+    );
+    return affectedRows > 0;
   },
 
   // Xóa chuyến đi

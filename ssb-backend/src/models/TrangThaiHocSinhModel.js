@@ -24,11 +24,11 @@ const TrangThaiHocSinhModel = {
   // Lấy tất cả học sinh trên chuyến đi
   async getByTripId(maChuyen) {
     const [rows] = await pool.query(
-      `SELECT ts.*, hs.hoTen, hs.lop, hs.anhDaiDien
+      `SELECT ts.*, hs.hoTen, hs.lop, hs.anhDaiDien, hs.maPhuHuynh
        FROM TrangThaiHocSinh ts
        LEFT JOIN HocSinh hs ON ts.maHocSinh = hs.maHocSinh
        WHERE ts.maChuyen = ?
-       ORDER BY ts.thuTuDiemDon`,
+       ORDER BY ts.thuTuDiemDon, ts.thuTuDiemTra`,
       [maChuyen]
     );
     return rows;
@@ -117,13 +117,13 @@ const TrangThaiHocSinhModel = {
       return false;
     }
 
-    const placeholders = studentIds.map(() => '?').join(',');
+    const placeholders = studentIds.map(() => "?").join(",");
     const [rows] = await pool.query(
       `SELECT COUNT(*) as count FROM TrangThaiHocSinh 
        WHERE maChuyen = ? AND maHocSinh IN (${placeholders})`,
       [tripId, ...studentIds]
     );
-    
+
     return rows[0].count > 0;
   },
 };

@@ -128,9 +128,17 @@ export function useGPS(tripId?: number) {
         currentPositionRef.current = point;
       },
       (err) => {
-        console.warn("[useGPS] geolocation error", err);
+        // 🔥 FIX: Không log timeout error khi component đã unmount
+        if (watchIdRef.current !== null) {
+          console.warn("[useGPS] geolocation error", err);
+          // Chỉ set running = false nếu vẫn còn watch active
+          if (err.code === 3) {
+            // Timeout error - không cần log nếu đã stop
+            setRunning(false);
+          }
+        }
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 } // Tăng timeout lên 20s để giảm false timeout
     );
 
     // Gửi GPS mỗi 3 giây
@@ -142,15 +150,19 @@ export function useGPS(tripId?: number) {
   }
 
   function stop() {
+    // 🔥 FIX: Clear watch ID trước để tránh timeout error sau khi unmount
+    const currentWatchId = watchIdRef.current;
+    watchIdRef.current = null;
+
     if (sendIntervalRef.current) {
       clearInterval(sendIntervalRef.current);
       sendIntervalRef.current = null;
     }
-    if (watchIdRef.current !== null && typeof navigator !== "undefined") {
+
+    if (currentWatchId !== null && typeof navigator !== "undefined") {
       try {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+        navigator.geolocation.clearWatch(currentWatchId);
       } catch {}
-      watchIdRef.current = null;
       setRunning(false);
     }
   }

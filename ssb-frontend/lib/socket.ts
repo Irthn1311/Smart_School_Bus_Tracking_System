@@ -186,6 +186,14 @@ class SocketService {
       );
     });
 
+    // 🔥 FIX: Listen for tripStatusUpdate (camelCase) from backend
+    this.socket.on("tripStatusUpdate", (data) => {
+      console.log("Trip status updated (camelCase):", data);
+      window.dispatchEvent(
+        new CustomEvent("tripStatusUpdate", { detail: data })
+      );
+    });
+
     // Explicit started/completed aliases (if server emits these)
     this.socket.on("trip_started", (data) => {
       console.log("Trip started:", data);
@@ -250,7 +258,7 @@ class SocketService {
         maThongBao: data.maThongBao,
         loaiThongBao: data.loaiThongBao,
         tieuDe: data.tieuDe,
-        noiDung: data.noiDung
+        noiDung: data.noiDung,
       });
       window.dispatchEvent(
         new CustomEvent("notificationNew", { detail: data })
@@ -265,13 +273,15 @@ class SocketService {
         maThongBao: data.maThongBao,
         loaiThongBao: data.loaiThongBao,
         tieuDe: data.tieuDe,
-        noiDung: data.noiDung
+        noiDung: data.noiDung,
       });
       // Bridge to same event as notification:new for consistency
       window.dispatchEvent(
         new CustomEvent("notificationNew", { detail: data })
       );
-      console.log("✅ [SOCKET] Dispatched notificationNew custom event (from notification)");
+      console.log(
+        "✅ [SOCKET] Dispatched notificationNew custom event (from notification)"
+      );
     });
 
     // Day 4: stop proximity and delay alerts

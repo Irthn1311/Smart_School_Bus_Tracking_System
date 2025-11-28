@@ -243,6 +243,7 @@ CREATE TABLE ChuyenDi (
     trangThai ENUM('chua_khoi_hanh', 'dang_chay', 'hoan_thanh', 'huy') DEFAULT 'chua_khoi_hanh',
     gioBatDauThucTe TIMESTAMP NULL,
     gioKetThucThucTe TIMESTAMP NULL,
+    diemHienTai INT NULL COMMENT 'Sequence number của điểm dừng hiện tại (1-based). Khi tài xế rời điểm dừng, giá trị này được cập nhật thành sequence của điểm tiếp theo.',
     ghiChu TEXT,
     ngayTao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ngayCapNhat TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -251,7 +252,8 @@ CREATE TABLE ChuyenDi (
     INDEX idx_maLichTrinh (maLichTrinh),
     INDEX idx_ngayChay (ngayChay),
     INDEX idx_trangThai (trangThai),
-    INDEX idx_gioBatDau (gioBatDauThucTe)
+    INDEX idx_gioBatDau (gioBatDauThucTe),
+    INDEX idx_diemHienTai (diemHienTai)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create TrangThaiHocSinh table (Student Status)
