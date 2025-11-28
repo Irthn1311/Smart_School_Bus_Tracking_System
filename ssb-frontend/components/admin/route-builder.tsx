@@ -6516,9 +6516,10 @@ export function RouteBuilder({
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 pr-4">
-            <div className="space-y-2">
-              {nearbyStudents.map((student) => {
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <div className="space-y-2">
+                {nearbyStudents.map((student) => {
                 const stopId = pendingStop?.id || '';
                 const isSelected = selectedStudentsByStop.get(stopId)?.includes(student.maHocSinh) || false;
                 
@@ -6631,9 +6632,10 @@ export function RouteBuilder({
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          </ScrollArea>
+                })}
+              </div>
+            </ScrollArea>
+          </div>
           
           <DialogFooter className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
