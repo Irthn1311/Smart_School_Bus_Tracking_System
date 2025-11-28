@@ -1456,30 +1456,21 @@ export default function TripDetailPage() {
             console.log("[Driver Trip] Loaded stop statuses:", statuses);
 
             // Update stop statuses based on database (thoiGianDen/thoiGianRoi)
-            // 🔥 FIX: Use stop.sequence instead of idx + 1 to match with thuTuDiem from DB
             setTrip((prevTrip: any) => ({
               ...prevTrip,
               stops: prevTrip.stops.map((stop: any, idx: number) => {
-                // 🔥 FIX: Use stop.sequence to match with thuTuDiem from DB
-                const stopSequence = stop.sequence || idx + 1;
+                const thuTu = idx + 1;
                 const savedStatus = statuses.find(
-                  (s: any) =>
-                    s.thuTuDiem === stopSequence || s.thuTuDiem === idx + 1
+                  (s: any) => s.thuTuDiem === thuTu
                 );
 
                 if (savedStatus) {
                   // If both arrival and departure times exist, mark as completed
                   if (savedStatus.thoiGianDen && savedStatus.thoiGianRoi) {
-                    console.log(
-                      `[Driver Trip] ✅ Marking stop ${stopSequence} (${stop.name}) as completed (both arrival and departure times exist)`
-                    );
                     return { ...stop, status: "completed" };
                   }
                   // If only arrival time exists, mark as current
                   if (savedStatus.thoiGianDen) {
-                    console.log(
-                      `[Driver Trip] ✅ Marking stop ${stopSequence} (${stop.name}) as current (only arrival time exists)`
-                    );
                     return { ...stop, status: "current" };
                   }
                 }
@@ -1487,9 +1478,22 @@ export default function TripDetailPage() {
               }),
             }));
 
-            // 🔥 FIX: Update currentStop based on diemHienTai from DB (already loaded above)
-            // Không cần update lại currentStop ở đây vì đã được set từ diemHienTai ở trên
-            // Chỉ cần đảm bảo status của stops được cập nhật đúng
+            // Update currentStop to first non-completed stop
+            const firstNonCompleted = mappedStops.findIndex(
+              (s: any, idx: number) => {
+                const thuTu = idx + 1;
+                const savedStatus = statuses.find(
+                  (s: any) => s.thuTuDiem === thuTu
+                );
+                return !savedStatus || !savedStatus.thoiGianRoi;
+              }
+            );
+            if (firstNonCompleted >= 0) {
+              setTrip((prev: any) => ({
+                ...prev,
+                currentStop: firstNonCompleted,
+              }));
+            }
           }
         } catch (statusError) {
           console.warn(
@@ -2292,98 +2296,23 @@ export default function TripDetailPage() {
               "[Driver Trip] Failed to notify stop departure:",
               response.statusText
             );
-          } else {
-            // 🔥 FIX: Reload trip data sau khi leave để cập nhật currentStop từ diemHienTai mới
-            try {
-              const reloadRes = await api.getTripById(tripIdNum);
-              const reloadData: any = (reloadRes as any).data || reloadRes;
-              const tripDetail = reloadData?.data || reloadData;
-              const updatedTrip = tripDetail?.trip || tripDetail;
-
-              if (updatedTrip) {
-                // Cập nhật currentStop từ diemHienTai
-                const dbCurrentStopSequence =
-                  updatedTrip?.currentStop || updatedTrip?.diemHienTai;
-                if (
-                  typeof dbCurrentStopSequence === "number" &&
-                  dbCurrentStopSequence > 0
-                ) {
-                  // Find array index of stop with this sequence number
-                  const stopIndex = trip.stops.findIndex(
-                    (s: any) => (s.sequence || 0) === dbCurrentStopSequence
-                  );
-                  if (stopIndex >= 0) {
-                    console.log(
-                      `[Driver Trip] ✅ Updated currentStop from diemHienTai after leave: sequence ${dbCurrentStopSequence} → array index ${stopIndex}`
-                    );
-
-                    // 🔥 FIX: Update currentStop và status của stops từ DB
-                    setTrip((prev: any) => {
-                      // Update stop statuses: completed cho stop vừa rời, current cho stop tiếp theo
-                      const updatedStops = prev.stops.map(
-                        (stop: any, idx: number) => {
-                          const stopSequence = stop.sequence || idx + 1;
-                          if (idx === prev.currentStop) {
-                            // Stop vừa rời: mark as completed
-                            return { ...stop, status: "completed" };
-                          } else if (idx === stopIndex) {
-                            // Stop tiếp theo: mark as current
-                            return { ...stop, status: "current" };
-                          }
-                          return stop;
-                        }
-                      );
-
-                      return {
-                        ...prev,
-                        currentStop: stopIndex,
-                        stops: updatedStops,
-                      };
-                    });
-
-                    // Clear dynamicDirections để fetch lại tuyến đường mới
-                    setDynamicDirections(null);
-                    // Reset debounce timer
-                    (window as any).__lastDirectionsFetch = 0;
-                    (window as any).__lastDriverCurrentStopIndex = stopIndex;
-                  }
-                }
-              }
-            } catch (reloadError) {
-              console.warn(
-                "[Driver Trip] Failed to reload trip data after leave:",
-                reloadError
-              );
-              // Fallback: Update local state anyway
-              setTrip((prev: any) => ({
-                ...prev,
-                currentStop: prev.currentStop + 1,
-                stops: prev.stops.map((stop: any, index: number) =>
-                  index === prev.currentStop
-                    ? { ...stop, status: "completed" }
-                    : index === prev.currentStop + 1
-                    ? { ...stop, status: "current" }
-                    : stop
-                ),
-              }));
-            }
           }
         } catch (err) {
           console.warn("[Driver Trip] Failed to notify stop departure:", err);
           // Continue anyway - update local state
-          setTrip((prev: any) => ({
-            ...prev,
-            currentStop: prev.currentStop + 1,
-            stops: prev.stops.map((stop: any, index: number) =>
-              index === prev.currentStop
-                ? { ...stop, status: "completed" }
-                : index === prev.currentStop + 1
-                ? { ...stop, status: "current" }
-                : stop
-            ),
-          }));
         }
 
+        setTrip((prev: any) => ({
+          ...prev,
+          currentStop: prev.currentStop + 1,
+          stops: prev.stops.map((stop: any, index: number) =>
+            index === prev.currentStop
+              ? { ...stop, status: "completed" }
+              : index === prev.currentStop + 1
+              ? { ...stop, status: "current" }
+              : stop
+          ),
+        }));
         setAtCurrentStop(false);
 
         // Show notification

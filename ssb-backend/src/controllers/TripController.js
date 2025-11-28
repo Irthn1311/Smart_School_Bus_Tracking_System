@@ -2090,45 +2090,18 @@ class TripController {
       const students = await TrangThaiHocSinhModel.getByTripId(id);
       // 🔥 FIX: Use existing tripType variable (already declared above at line 1877)
 
-      console.log(
-        `[TripController] arriveAtStop: Filtering students for stop ${sequence} (tripType: ${tripType})`
-      );
-      console.log(
-        `[TripController] arriveAtStop: Total students in trip: ${students.length}`
-      );
-      console.log(
-        `[TripController] arriveAtStop: Sample student data:`,
-        students.slice(0, 3).map((s) => ({
-          maHocSinh: s.maHocSinh,
-          hoTen: s.hoTen,
-          thuTuDiemDon: s.thuTuDiemDon,
-          thuTuDiemTra: s.thuTuDiemTra,
-          trangThai: s.trangThai,
-        }))
-      );
-
       // 🔥 FIX: Filter students based on trip type
       const studentsAtThisStop = students.filter((s) => {
         if (tripType === "tra_chieu") {
           // Return trip: use thuTuDiemTra
-          const matches =
-            s.thuTuDiemTra && parseInt(s.thuTuDiemTra) === parseInt(sequence);
-          if (matches) {
-            console.log(
-              `[TripController] ✅ Matched student ${s.maHocSinh} (${s.hoTen}) at stop ${sequence} using thuTuDiemTra=${s.thuTuDiemTra}`
-            );
-          }
-          return matches;
+          return (
+            s.thuTuDiemTra && parseInt(s.thuTuDiemTra) === parseInt(sequence)
+          );
         } else {
           // Morning trip: use thuTuDiemDon
-          const matches =
-            s.thuTuDiemDon && parseInt(s.thuTuDiemDon) === parseInt(sequence);
-          if (matches) {
-            console.log(
-              `[TripController] ✅ Matched student ${s.maHocSinh} (${s.hoTen}) at stop ${sequence} using thuTuDiemDon=${s.thuTuDiemDon}`
-            );
-          }
-          return matches;
+          return (
+            s.thuTuDiemDon && parseInt(s.thuTuDiemDon) === parseInt(sequence)
+          );
         }
       });
 
@@ -2139,16 +2112,6 @@ class TripController {
           tripType === "tra_chieu" ? "thuTuDiemTra" : "thuTuDiemDon"
         })`
       );
-      if (studentsAtThisStop.length > 0) {
-        console.log(
-          `[TripController] arriveAtStop: Students at stop ${sequence}:`,
-          studentsAtThisStop.map((s) => ({
-            maHocSinh: s.maHocSinh,
-            hoTen: s.hoTen,
-            maPhuHuynh: s.maPhuHuynh,
-          }))
-        );
-      }
 
       if (studentsAtThisStop.length === 0) {
         console.log(
@@ -3210,19 +3173,11 @@ class TripController {
             if (tripType === "tra_chieu") {
               // Return trip: notify about drop-off
               tieuDe = "✅ Con đã được trả";
-              noiDung = `${
-                student.hoTen
-              } đã được trả tại điểm dừng an toàn trên xe buýt ${
-                bus?.bienSoXe || trip.tenChuyen || "N/A"
-              } tuyến ${route?.tenTuyen || "N/A"}`;
+              noiDung = `${student.hoTen} đã được trả tại điểm dừng an toàn.`;
             } else {
               // Morning trip: notify about checkout (shouldn't happen in morning trip, but keep for safety)
-              tieuDe = "✅ Con đã xuống xe";
-              noiDung = `${
-                student.hoTen
-              } đã được trả tại điểm dừng an toàn trên xe buýt ${
-                bus?.bienSoXe || trip.tenChuyen || "N/A"
-              } tuyến ${route?.tenTuyen || "N/A"}`;
+              tieuDe = "Con đã xuống xe";
+              noiDung = `${student.hoTen} đã được trả tại điểm dừng an toàn`;
             }
 
             // 🔥 FIX: Use correct signature for createMultiple (object format)

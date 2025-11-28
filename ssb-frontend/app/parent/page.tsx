@@ -1423,80 +1423,7 @@ export default function ParentDashboard() {
 
   // When route changes or student changes, load stops for that route
   useEffect(() => {
-    async function loadStops(routeId?: number, tripId?: number) {
-      // 🔥 FIX: Nếu có tripId nhưng chưa có routeId, load routeId từ trip detail trước
-      if (!routeId && tripId) {
-        try {
-          console.log(
-            "[Parent] loadStops: No routeId, loading from trip detail:",
-            tripId
-          );
-          const tripRes = await apiClient.getTripById(tripId);
-          const tripData: any = (tripRes as any).data || tripRes;
-          const tripDetail = tripData?.data || tripData;
-          const trip = tripDetail?.trip || tripDetail;
-
-          // Lấy routeId từ trip detail
-          const routeIdFromTrip =
-            trip?.schedule?.maTuyen ||
-            trip?.maTuyen ||
-            tripDetail?.schedule?.maTuyen ||
-            tripDetail?.routeInfo?.maTuyen ||
-            tripDetail?.maTuyen;
-
-          if (routeIdFromTrip) {
-            const rid = Number(routeIdFromTrip);
-            if (Number.isFinite(rid)) {
-              console.log(
-                `[Parent] loadStops: Found routeId ${rid} from trip ${tripId}, setting selectedRouteId`
-              );
-              setSelectedRouteId(rid);
-              routeId = rid; // Use this routeId for loading stops
-            }
-          }
-
-          // 🔥 FIX: Nếu trip detail có stops, dùng luôn thay vì load từ route API
-          const tripStops = tripDetail?.stops || trip?.stops || [];
-          if (tripStops.length > 0) {
-            console.log(
-              `[Parent] loadStops: Found ${tripStops.length} stops from trip detail, using them directly`
-            );
-            const mapped = tripStops.map((s: any) => ({
-              id:
-                (s.maDiem ||
-                  s.id ||
-                  `${s.viDo || s.lat}_${s.kinhDo || s.lng}`) + "",
-              lat: Number(s.viDo || s.lat || s.latitude),
-              lng: Number(s.kinhDo || s.lng || s.longitude),
-              label: s.tenDiem || s.name || s.label,
-              sequence: s.sequence || s.thuTu || 0,
-            }));
-            mapped.sort(
-              (a: any, b: any) => (a.sequence || 0) - (b.sequence || 0)
-            );
-            const filteredAndSorted = mapped.filter(
-              (p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng)
-            );
-            console.log(`[Parent] 🔍 Setting stops array from trip detail:`, {
-              count: filteredAndSorted.length,
-              stops: filteredAndSorted.map((s: any, i: number) => ({
-                index: i,
-                sequence: s.sequence,
-                label: s.label,
-                id: s.id,
-              })),
-            });
-            setStops(filteredAndSorted);
-            return; // Đã load stops từ trip detail, không cần load từ route API nữa
-          }
-        } catch (e) {
-          console.warn(
-            "[Parent] loadStops: Failed to load routeId from trip detail:",
-            e
-          );
-        }
-      }
-
+    async function loadStops(routeId?: number) {
       if (!routeId) {
         console.log("[Parent] loadStops skipped: No routeId");
         return;
@@ -1505,14 +1432,14 @@ export default function ParentDashboard() {
         "[Parent] loadStops calling API for route:",
         routeId,
         "trip:",
-        tripId
+        selectedTripId
       );
 
       let polyline: string | null = null;
       let points: any[] = [];
 
       // 1. Try to get detailed polyline from Trip API if trip is selected
-      if (tripId) {
+      if (selectedTripId) {
         try {
           // Note: We intentionally skip fetching polyline from backend here
           // because the backend often returns a simplified straight-line polyline.
@@ -1520,7 +1447,7 @@ export default function ParentDashboard() {
           // directions from Google Maps API based on the stops.
 
           /* 
-          const tripRes = await apiClient.getTripById(tripId);
+          const tripRes = await apiClient.getTripById(selectedTripId);
           const resBody: any = (tripRes as any).data || tripRes;
           
           if (resBody?.success && resBody?.data?.routeInfo?.polyline) {
@@ -1587,13 +1514,10 @@ export default function ParentDashboard() {
         console.warn("[Parent] loadStops failed", e);
       }
     }
-    // 🔥 FIX: Gọi loadStops với cả selectedRouteId và selectedTripId
-    // Nếu có selectedTripId nhưng chưa có selectedRouteId, sẽ load routeId từ trip detail
-    loadStops(selectedRouteId, selectedTripId);
+    loadStops(selectedRouteId);
   }, [selectedRouteId, selectedTripId]);
 
   // Resolve and select a trip for current selection (run after auth ready)
-  // 🔥 FIX: Chạy ngay khi user load, không phụ thuộc vào selectedRouteId để đảm bảo load được trip khi refresh
   useEffect(() => {
     async function resolveTrip() {
       try {
@@ -1604,74 +1528,26 @@ export default function ParentDashboard() {
         const ngayChay = `${yyyy}-${mm}-${dd}`;
 
         const paramsBase: any = { ngayChay };
-        // 🔥 FIX: Chỉ filter theo route nếu đã có selectedRouteId, nhưng vẫn tìm trips nếu chưa có
         if (selectedRouteId) paramsBase.maTuyen = selectedRouteId;
 
-        console.log(
-          "[Parent] resolveTrip: Looking for trips with params:",
-          paramsBase
-        );
-
-        // 🔥 FIX: Ưu tiên tìm chuyến đang chạy (dang_chay) - bao gồm cả chuyến đi và chuyến về
+        // Prefer running trips
         const runningRes: any = await apiClient
           .getTrips({ ...paramsBase, trangThai: "dang_chay" })
           .catch(() => ({ data: [] }));
         let trips: any[] =
           (runningRes && (runningRes.data || runningRes)) || [];
 
-        console.log(
-          `[Parent] resolveTrip: Found ${trips.length} running trips`
-        );
-
-        // 🔥 FIX: Nếu không có chuyến đang chạy, tìm chuyến chưa khởi hành
+        // Fallback: not started yet
         if (!trips || trips.length === 0) {
           const scheduledRes: any = await apiClient
             .getTrips({ ...paramsBase, trangThai: "chua_khoi_hanh" })
             .catch(() => ({ data: [] }));
           trips = (scheduledRes && (scheduledRes.data || scheduledRes)) || [];
-          console.log(
-            `[Parent] resolveTrip: Found ${trips.length} scheduled trips`
-          );
-        }
-
-        // 🔥 FIX: Nếu vẫn không có trips và chưa có selectedRouteId, thử tìm tất cả trips (không filter route)
-        if ((!trips || trips.length === 0) && !selectedRouteId) {
-          console.log(
-            "[Parent] resolveTrip: No trips found with route filter, trying without route filter"
-          );
-          const allRunningRes: any = await apiClient
-            .getTrips({ ngayChay, trangThai: "dang_chay" })
-            .catch(() => ({ data: [] }));
-          trips =
-            (allRunningRes && (allRunningRes.data || allRunningRes)) || [];
-
-          if (!trips || trips.length === 0) {
-            const allScheduledRes: any = await apiClient
-              .getTrips({ ngayChay, trangThai: "chua_khoi_hanh" })
-              .catch(() => ({ data: [] }));
-            trips =
-              (allScheduledRes && (allScheduledRes.data || allScheduledRes)) ||
-              [];
-          }
-          console.log(
-            `[Parent] resolveTrip: Found ${trips.length} trips without route filter`
-          );
         }
 
         if (trips.length > 0) {
-          // 🔥 FIX: Ưu tiên chuyến về (tra_chieu) đang chạy nếu có
-          const returnTrip = trips.find(
-            (t: any) =>
-              t.loaiChuyen === "tra_chieu" && t.trangThai === "dang_chay"
-          );
-          const selectedTrip = returnTrip || trips[0];
-
-          const first = selectedTrip;
+          const first = trips[0];
           const tid = Number(first.maChuyen || first.id);
-          console.log(
-            `[Parent] resolveTrip: Selected trip ${tid} (type: ${first.loaiChuyen}, status: ${first.trangThai})`
-          );
-
           setSelectedTripId(Number.isFinite(tid) ? tid : undefined);
           // derive route id from trip
           const rid = Number(first.maTuyen || first.routeId);
@@ -1683,7 +1559,6 @@ export default function ParentDashboard() {
             route: first.tenTuyen || `Trip ${tid}`,
           });
         } else {
-          console.warn("[Parent] resolveTrip: No trips found");
           setSelectedTripId(undefined);
         }
       } catch (e) {
@@ -1692,7 +1567,7 @@ export default function ParentDashboard() {
       }
     }
     if (!loading && user) resolveTrip();
-  }, [loading, user]); // 🔥 FIX: Bỏ selectedRouteId khỏi dependencies để chạy ngay khi user load
+  }, [selectedRouteId, loading, user]);
 
   // Load thông tin con từ API - FIX: Hiển thị thông tin từ schedule trước khi trip start
   useEffect(() => {
@@ -1728,65 +1603,9 @@ export default function ParentDashboard() {
           }
 
           // 🔥 FIX: Set trip ID và bus info từ schedule ngay cả khi chưa start
-          // 🔥 FIX: Ưu tiên chuyến về (tra_chieu) đang chạy nếu có
           if (tripInfo.maChuyen) {
             const tid = Number(tripInfo.maChuyen);
             if (Number.isFinite(tid)) {
-              // 🔥 FIX: Nếu đây là chuyến đi (don_sang), kiểm tra xem có chuyến về đang chạy không
-              if (tripInfo.loaiChuyen === "don_sang") {
-                try {
-                  const today = new Date().toISOString().split("T")[0];
-                  const tripsRes = await apiClient.getTrips({
-                    ngayChay: today,
-                  });
-                  const allTrips = Array.isArray((tripsRes as any)?.data)
-                    ? (tripsRes as any).data
-                    : [];
-
-                  // Tìm chuyến về đang chạy
-                  const returnTrip = allTrips.find(
-                    (t: any) =>
-                      (t.loaiChuyen === "tra_chieu" ||
-                        t.schedule?.loaiChuyen === "tra_chieu") &&
-                      (t.trangThai === "dang_chay" || t.status === "dang_chay")
-                  );
-
-                  if (returnTrip) {
-                    const returnTripId = Number(
-                      returnTrip.maChuyen || returnTrip.id
-                    );
-                    if (Number.isFinite(returnTripId)) {
-                      console.log(
-                        `[Parent] ✅ Found running return trip ${returnTripId}, using it instead of morning trip ${tid}`
-                      );
-                      setSelectedTripId(returnTripId);
-                      // Set route ID từ chuyến về
-                      const rid = Number(
-                        returnTrip.maTuyen || returnTrip.routeId
-                      );
-                      if (Number.isFinite(rid)) {
-                        setSelectedRouteId(rid);
-                      }
-                      // Set bus info từ chuyến về
-                      if (returnTrip.bienSoXe || returnTrip.tenTuyen) {
-                        setBusInfo({
-                          id: (returnTrip.maXe || "bus") + "",
-                          plateNumber: returnTrip.bienSoXe || "—",
-                          route: returnTrip.tenTuyen || "—",
-                        });
-                      }
-                      return; // Không set selectedTripId từ morning trip nữa
-                    }
-                  }
-                } catch (err) {
-                  console.warn(
-                    "[Parent] Failed to check for return trip:",
-                    err
-                  );
-                }
-              }
-
-              // Nếu không có chuyến về đang chạy, dùng chuyến đi
               setSelectedTripId(tid);
               console.log("[Parent] Set selectedTripId from schedule:", tid);
             }

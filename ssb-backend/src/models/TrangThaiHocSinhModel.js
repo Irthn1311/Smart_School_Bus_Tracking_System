@@ -24,11 +24,11 @@ const TrangThaiHocSinhModel = {
   // Lấy tất cả học sinh trên chuyến đi
   async getByTripId(maChuyen) {
     const [rows] = await pool.query(
-      `SELECT ts.*, hs.hoTen, hs.lop, hs.anhDaiDien, hs.maPhuHuynh
+      `SELECT ts.*, hs.hoTen, hs.lop, hs.anhDaiDien
        FROM TrangThaiHocSinh ts
        LEFT JOIN HocSinh hs ON ts.maHocSinh = hs.maHocSinh
        WHERE ts.maChuyen = ?
-       ORDER BY ts.thuTuDiemDon, ts.thuTuDiemTra`,
+       ORDER BY ts.thuTuDiemDon`,
       [maChuyen]
     );
     return rows;
