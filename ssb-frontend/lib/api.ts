@@ -876,11 +876,20 @@ class ApiClient {
     return this.request(`/reports/overview${q ? `?${q}` : ""}`);
   }
 
-  async getReportView(params?: { type?: string; from?: string; to?: string }) {
+  async getReportView(params?: { type?: string; from?: string; to?: string; filters?: any }) {
     const queryParams = new URLSearchParams();
     if (params?.type) queryParams.append("type", params.type);
     if (params?.from) queryParams.append("from", params.from);
     if (params?.to) queryParams.append("to", params.to);
+    if (params?.filters) {
+      // Add filters as query params
+      Object.keys(params.filters).forEach(key => {
+        const value = params.filters![key];
+        if (value !== undefined && value !== null && value !== "") {
+          queryParams.append(`filter_${key}`, String(value));
+        }
+      });
+    }
     const q = queryParams.toString();
     return this.request(`/reports/view${q ? `?${q}` : ""}`);
   }
@@ -961,12 +970,22 @@ class ApiClient {
     type?: string;
     from?: string;
     to?: string;
+    filters?: any;
   }) {
     const queryParams = new URLSearchParams();
     if (params?.format) queryParams.append("format", params.format);
     if (params?.type) queryParams.append("type", params.type);
     if (params?.from) queryParams.append("from", params.from);
     if (params?.to) queryParams.append("to", params.to);
+    if (params?.filters) {
+      // Add filters as query params
+      Object.keys(params.filters).forEach(key => {
+        const value = params.filters![key];
+        if (value !== undefined && value !== null && value !== "") {
+          queryParams.append(`filter_${key}`, String(value));
+        }
+      });
+    }
     const q = queryParams.toString();
     // Return blob for file download
     const url = `${this.baseURL}/reports/export${q ? `?${q}` : ""}`;
@@ -983,6 +1002,46 @@ class ApiClient {
     if (!response.ok) throw new Error("Export failed");
     const blob = await response.blob();
     return blob;
+  }
+
+  // Report templates
+  async saveReportTemplate(data: {
+    name: string;
+    reportType: string;
+    dateRange?: string;
+    customFrom?: string;
+    customTo?: string;
+    filters?: any;
+  }) {
+    return this.request("/reports/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getReportTemplates() {
+    return this.request("/reports/templates");
+  }
+
+  async deleteReportTemplate(id: number) {
+    return this.request(`/reports/templates/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Send report via email
+  async sendReportEmail(params: {
+    format?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+    recipientEmail: string;
+    filters?: any;
+  }) {
+    return this.request("/reports/send-email", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
   }
 
   // Get students by parent

@@ -14,6 +14,7 @@ USE school_bus_system;
 -- Drop existing tables if they exist (for clean initialization)
 -- Note: temp_student_stop_mapping is a TEMPORARY TABLE used only in seed scripts, not in schema
 -- IMPORTANT: Drop tables with foreign keys FIRST, then drop referenced tables
+DROP TABLE IF EXISTS report_templates;
 DROP TABLE IF EXISTS student_stop_suggestions;
 DROP TABLE IF EXISTS HocSinh_DiemDung;  -- Drop before DiemDung (has FK to DiemDung)
 DROP TABLE IF EXISTS trip_stop_status;
@@ -388,6 +389,23 @@ ALTER TABLE student_stop_suggestions COMMENT = 'Lưu mapping gợi ý học sinh
 -- NOTE: HocSinh_DiemDung table has been removed
 -- All student-stop mappings are now stored in student_stop_suggestions (route-specific)
 -- ===========================================================================
+CREATE TABLE IF NOT EXISTS report_templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  report_type VARCHAR(50) NOT NULL COMMENT 'Loại báo cáo: trips, buses, drivers, students, incidents',
+  filters_json JSON COMMENT 'Bộ lọc dữ liệu dạng JSON',
+  date_range VARCHAR(50) COMMENT 'Khoảng thời gian: 7days, 30days, 90days, custom',
+  custom_from DATE COMMENT 'Ngày bắt đầu (nếu date_range = custom)',
+  custom_to DATE COMMENT 'Ngày kết thúc (nếu date_range = custom)',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES NguoiDung(maNguoiDung) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_report_type (report_type),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Bảng lưu mẫu báo cáo của người dùng';
+
 
 -- Display completion message
 SELECT 'Database initialization completed successfully!' as message;

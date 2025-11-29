@@ -233,6 +233,94 @@ class EmailService {
       return { success: false, sent: false, error: error.message };
     }
   }
+
+  /**
+   * Gửi báo cáo qua email
+   * @param {string} toEmail - Email người nhận
+   * @param {string} reportType - Loại báo cáo
+   * @param {string} format - Định dạng (pdf, excel, csv)
+   * @param {string} dateFrom - Ngày bắt đầu (YYYY-MM-DD)
+   * @param {string} dateTo - Ngày kết thúc (YYYY-MM-DD)
+   * @param {Buffer} reportBuffer - Buffer của file báo cáo
+   * @param {string} fileName - Tên file
+   */
+  static async sendReportEmail(toEmail, reportType, format, dateFrom, dateTo, reportBuffer, fileName) {
+    try {
+      const transporter = this.getTransporter();
+
+      if (!transporter) {
+        console.warn("Email service not configured. Cannot send report email.");
+        return { success: false, sent: false, message: "Email service not configured" };
+      }
+
+      const formatExtension = format === "pdf" ? "pdf" : format === "csv" ? "csv" : "xlsx";
+      const contentType = format === "pdf" 
+        ? "application/pdf" 
+        : format === "csv" 
+        ? "text/csv" 
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      const mailOptions = {
+        from: `"Smart School Bus" <${user}>`,
+        to: toEmail,
+        subject: `Báo cáo ${reportType} - ${dateFrom} đến ${dateTo}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+              .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
+              .info { background: white; padding: 15px; border-radius: 4px; margin: 15px 0; }
+              .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>📊 Báo cáo Smart School Bus</h1>
+              </div>
+              <div class="content">
+                <p>Xin chào,</p>
+                <p>Bạn đã nhận được báo cáo từ hệ thống Smart School Bus.</p>
+                
+                <div class="info">
+                  <p><strong>Loại báo cáo:</strong> ${reportType}</p>
+                  <p><strong>Khoảng thời gian:</strong> ${dateFrom} đến ${dateTo}</p>
+                  <p><strong>Định dạng:</strong> ${format.toUpperCase()}</p>
+                </div>
+                
+                <p>Vui lòng xem file đính kèm để xem chi tiết báo cáo.</p>
+                
+                <div class="footer">
+                  <p>Đây là email tự động từ hệ thống Smart School Bus.</p>
+                  <p>Vui lòng không trả lời email này.</p>
+                </div>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        attachments: [
+          {
+            filename: fileName || `report_${reportType}_${dateFrom}_${dateTo}.${formatExtension}`,
+            content: reportBuffer,
+            contentType: contentType,
+          },
+        ],
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log("✅ Report email sent:", info.messageId);
+      return { success: true, sent: true, messageId: info.messageId };
+    } catch (error) {
+      console.error("❌ Error sending report email:", error);
+      return { success: false, sent: false, error: error.message };
+    }
+  }
 }
 
 export default EmailService;

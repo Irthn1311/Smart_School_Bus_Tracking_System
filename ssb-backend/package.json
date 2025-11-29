@@ -24,6 +24,7 @@
     "test:optimization": "node scripts/test_bus_stop_optimization.js",
     "test:api": "node scripts/test_optimization_api.js",
     "test:coords": "node scripts/test_student_coords.js",
+    "download-fonts": "node scripts/download-fonts.js",
     "lint": "eslint src --ext .js",
     "lint:fix": "eslint src --ext .js --fix"
   },
